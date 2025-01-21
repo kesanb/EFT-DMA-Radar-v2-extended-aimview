@@ -17,7 +17,7 @@ If it bothers you, turn off the SK button (useSkeleton) and switch to DotESP ins
 There may still be situations where crashes occur, so I’m asking for testing and feedback.
 Also, I’m a beginner at coding who heavily relies on AI, so if you have any suggestions for organizing or optimizing the code, please feel free to share them.
 
-![image](https://github.com/user-attachments/assets/0236e630-5f9c-43f6-b219-58c3b92ede17)
+![image](https://github.com/user-attachments/assets/a1f99ee2-5b69-4c2b-9242-383e819b4131)
 ![image](https://github.com/user-attachments/assets/6e634682-accf-444e-bcc8-043709d71394)
 
 

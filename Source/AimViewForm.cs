@@ -19,6 +19,7 @@ namespace eft_dma_radar
         private Button btnToggleWeapon;
         private Button btnToggleHealth;
         private Button btnToggleMaximize;
+        private Button btnRefresh;
         private bool showCrosshair = true;
         private FormBorderStyle previousBorderStyle;
         private bool wasTopMost;
@@ -26,6 +27,7 @@ namespace eft_dma_radar
         private int _currentFrame = 0;
         private Matrix4x4? _lastViewMatrix;
         private const float RAPID_MOVEMENT_THRESHOLD = 0.1f; // 急速な動きの閾値
+
 
         // ESPに必要なデータを保持するプロパティ
         public Player LocalPlayer { get; set; }
@@ -38,6 +40,9 @@ namespace eft_dma_radar
         public QuestManager QuestManager { get; set; }
         public List<PlayerCorpse> Corpses { get; set; }
         public CameraManager CameraManager { get; set; }
+
+        // RestartRadarのコールバック
+        public Action OnRestartRadarRequested { get; set; }
 
         public AimViewForm(Config config)
         {
@@ -53,12 +58,41 @@ namespace eft_dma_radar
             // クロスヘアの状態を設定ファイルから読み込む
             this.showCrosshair = this.config.AimviewSettings.ShowCrosshair;
 
+            // 最大化切り替えボタンの設定
+            this.btnToggleMaximize = new Button
+            {
+                Text = "□",
+                Size = new Size(20, 20),
+                Location = new Point(5, 5),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand
+            };
+            this.btnToggleMaximize.FlatAppearance.BorderSize = 0;
+            this.btnToggleMaximize.Click += this.BtnToggleMaximize_Click;
+
+            // Refreshボタンの追加
+            this.btnRefresh = new Button
+            {
+                Text = "⟳",
+                Size = new Size(20, 20),
+                Location = new Point(30, 5),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand
+            };
+            this.btnRefresh.FlatAppearance.BorderSize = 0;
+            this.btnRefresh.Font = new Font("Segoe UI", 10f);
+            this.btnRefresh.Click += BtnRefresh_Click;
+
             // クロスヘア切り替えボタンの設定
             this.btnToggleCrosshair = new Button
             {
                 Text = "CH",
                 Size = new Size(30, 20),
-                Location = new Point(5, 5),
+                Location = new Point(55, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.showCrosshair ? Color.LimeGreen : Color.Red,
@@ -79,7 +113,7 @@ namespace eft_dma_radar
             {
                 Text = "SK",
                 Size = new Size(30, 20),
-                Location = new Point(40, 5), // クロスヘアボタンの右に配置
+                Location = new Point(90, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.config.AimviewSettings.useSkeleton ? Color.LimeGreen : Color.Red,
@@ -96,9 +130,9 @@ namespace eft_dma_radar
             // 名前表示切り替えボタン
             this.btnToggleName = new Button
             {
-                Text = "Name",
+                Text = "Na",
                 Size = new Size(30, 20),
-                Location = new Point(75, 5),
+                Location = new Point(125, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.config.AimviewSettings.ObjectSettings["Player"].Name ? Color.LimeGreen : Color.Red,
@@ -116,9 +150,9 @@ namespace eft_dma_radar
             // 武器情報の表示切り替えボタン
             this.btnToggleWeapon = new Button
             {
-                Text = "Weapon",
+                Text = "We",
                 Size = new Size(30, 20),
-                Location = new Point(110, 5),
+                Location = new Point(160, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.config.AimviewSettings.showWeaponInfo ? Color.LimeGreen : Color.Red,
@@ -137,7 +171,7 @@ namespace eft_dma_radar
             {
                 Text = "HP",
                 Size = new Size(30, 20),
-                Location = new Point(145, 5),
+                Location = new Point(195, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.config.AimviewSettings.showHealthInfo ? Color.LimeGreen : Color.Red,
@@ -154,9 +188,9 @@ namespace eft_dma_radar
             // 距離表示切り替えボタン
             this.btnToggleDistance = new Button
             {
-                Text = "Distance",
+                Text = "Dis",
                 Size = new Size(30, 20),
-                Location = new Point(180, 5),
+                Location = new Point(230, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = this.config.AimviewSettings.ObjectSettings["Player"].Distance ? Color.LimeGreen : Color.Red,
@@ -170,21 +204,6 @@ namespace eft_dma_radar
                 this.btnToggleDistance.ForeColor = playerSettings.Distance ? Color.LimeGreen : Color.Red;
                 this.aimViewCanvas.Invalidate();
             };
-
-            // 最大化切り替えボタンの設定
-            this.btnToggleMaximize = new Button
-            {
-                Text = "□",
-                Size = new Size(20, 20),
-                Location = new Point(this.Width - 25, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = Color.White,
-                Cursor = Cursors.Hand,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
-            };
-            this.btnToggleMaximize.FlatAppearance.BorderSize = 0;
-            this.btnToggleMaximize.Click += this.BtnToggleMaximize_Click;
 
             // AimViewキャンバスの設定
             this.aimViewCanvas = new SKGLControl
@@ -201,7 +220,9 @@ namespace eft_dma_radar
             this.Controls.Add(this.btnToggleHealth);
             this.Controls.Add(this.btnToggleDistance);
             this.Controls.Add(this.btnToggleMaximize);
+            this.Controls.Add(this.btnRefresh);
             this.btnToggleMaximize.BringToFront();
+            this.btnRefresh.BringToFront();
             this.btnToggleDistance.BringToFront();
             this.btnToggleHealth.BringToFront();
             this.btnToggleWeapon.BringToFront();
@@ -970,13 +991,6 @@ namespace eft_dma_radar
             canvas.DrawLine(start.X, start.Y, end.X, end.Y, paint);
         }
 
-        private void BtnToggleCrosshair_Click(object sender, EventArgs e)
-        {
-            this.showCrosshair = !this.showCrosshair;
-            this.btnToggleCrosshair.ForeColor = this.showCrosshair ? Color.LimeGreen : Color.Red;
-            this.UpdateAndRedraw();
-        }
-
         private void BtnToggleMaximize_Click(object sender, EventArgs e)
         {
             if (this.WindowState == FormWindowState.Maximized)
@@ -1003,14 +1017,15 @@ namespace eft_dma_radar
                 this.FormBorderStyle = FormBorderStyle.None;
                 this.TopMost = true;
                 
-                // ボタンの位置を調整
-                this.btnToggleCrosshair.Location = new Point(5, 5);
-                this.btnToggleSkeleton.Location = new Point(40, 5);
-                this.btnToggleName.Location = new Point(75, 5);
-                this.btnToggleWeapon.Location = new Point(110, 5);
-                this.btnToggleHealth.Location = new Point(145, 5);
-                this.btnToggleDistance.Location = new Point(180, 5);
-                this.btnToggleMaximize.Location = new Point(this.ClientSize.Width - 25, 5);
+                // ボタンの位置を調整（新しい配置順序）
+                this.btnToggleMaximize.Location = new Point(5, 5);
+                this.btnRefresh.Location = new Point(30, 5);
+                this.btnToggleCrosshair.Location = new Point(55, 5);
+                this.btnToggleSkeleton.Location = new Point(90, 5);
+                this.btnToggleName.Location = new Point(125, 5);
+                this.btnToggleWeapon.Location = new Point(160, 5);
+                this.btnToggleHealth.Location = new Point(195, 5);
+                this.btnToggleDistance.Location = new Point(230, 5);
             }
             // 最大化解除時に元のスタイルに戻す
             else if (this.WindowState != FormWindowState.Maximized && this.FormBorderStyle == FormBorderStyle.None)
@@ -1018,14 +1033,15 @@ namespace eft_dma_radar
                 this.FormBorderStyle = this.previousBorderStyle;
                 this.TopMost = this.wasTopMost;
                 
-                // ボタンの位置を元に戻す
-                this.btnToggleCrosshair.Location = new Point(5, 5);
-                this.btnToggleSkeleton.Location = new Point(40, 5);
-                this.btnToggleName.Location = new Point(75, 5);
-                this.btnToggleWeapon.Location = new Point(110, 5);
-                this.btnToggleHealth.Location = new Point(145, 5);
-                this.btnToggleDistance.Location = new Point(180, 5);
-                this.btnToggleMaximize.Location = new Point(this.ClientSize.Width - 25, 5);
+                // ボタンの位置を元に戻す（新しい配置順序）
+                this.btnToggleMaximize.Location = new Point(5, 5);
+                this.btnRefresh.Location = new Point(30, 5);
+                this.btnToggleCrosshair.Location = new Point(55, 5);
+                this.btnToggleSkeleton.Location = new Point(90, 5);
+                this.btnToggleName.Location = new Point(125, 5);
+                this.btnToggleWeapon.Location = new Point(160, 5);
+                this.btnToggleHealth.Location = new Point(195, 5);
+                this.btnToggleDistance.Location = new Point(230, 5);
             }
             
             // 最大化ボタンのテキストを更新
@@ -1046,6 +1062,11 @@ namespace eft_dma_radar
         {
             this.AllPlayers = allPlayers;
             this.LocalPlayer = localPlayer;
+        }
+
+        private void BtnRefresh_Click(object sender, EventArgs e)
+        {
+            OnRestartRadarRequested?.Invoke();
         }
     }
 } 

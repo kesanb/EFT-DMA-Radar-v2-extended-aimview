@@ -6544,6 +6544,8 @@ namespace eft_dma_radar
                 this.Location.X + this.Width,
                 this.Location.Y
             );
+            // RestartRadarメソッドを登録
+            this.aimViewForm.OnRestartRadarRequested = () => this.btnRestartRadar_Click(null, EventArgs.Empty);
         }
 
         protected override void OnLoad(EventArgs e)
@@ -6560,37 +6562,95 @@ namespace eft_dma_radar
         {
             if (this.config.AimviewSettings.Enabled)
             {
-                // データが初期化されているか確認
-                if (Memory.CameraManager == null || this.LocalPlayer == null || this.AllPlayers == null)
-                {
-                    return; // データが準備できていない場合は表示しない
-                }
-
+                // AimViewFormが未初期化または破棄されている場合は初期化
                 if (this.aimViewForm == null || this.aimViewForm.IsDisposed)
                 {
                     this.InitializeAimViewForm();
                 }
-                
-                // AimViewFormにデータを更新
-                this.aimViewForm.LocalPlayer = this.LocalPlayer;
-                this.aimViewForm.AllPlayers = this.AllPlayers;
-                this.aimViewForm.Loot = this.Loot;
-                this.aimViewForm.Grenades = this.Grenades;
-                this.aimViewForm.Tripwires = this.Tripwires;
-                this.aimViewForm.Exfils = this.Exfils;
-                this.aimViewForm.Transits = this.Transits;
-                this.aimViewForm.QuestManager = this.QuestManager;
-                this.aimViewForm.Corpses = this.Corpses;
-                this.aimViewForm.CameraManager = Memory.CameraManager;
-                
-                this.aimViewForm.Show();
-                this.aimViewForm.UpdateAndRedraw();
+
+                // AimViewFormが有効な場合、表示して必要なデータを更新
+                if (this.aimViewForm != null && !this.aimViewForm.IsDisposed)
+                {
+                    try
+                    {
+                        // レイド中かどうかをチェック
+                        bool isInRaid = Memory.Ready && Memory.InGame && !Memory.InHideout;
+
+                        if (isInRaid)
+                        {
+                            // レイド中の場合、通常のデータ更新
+                            this.aimViewForm.LocalPlayer = this.LocalPlayer;
+                            this.aimViewForm.AllPlayers = this.AllPlayers ?? new ReadOnlyDictionary<string, Player>(new Dictionary<string, Player>());
+                            this.aimViewForm.Loot = this.Loot;
+                            this.aimViewForm.Grenades = this.Grenades ?? new List<Grenade>();
+                            this.aimViewForm.Tripwires = this.Tripwires ?? new List<Tripwire>();
+                            this.aimViewForm.Exfils = this.Exfils ?? new List<Exfil>();
+                            this.aimViewForm.Transits = this.Transits ?? new List<Transit>();
+                            this.aimViewForm.QuestManager = this.QuestManager;
+                            this.aimViewForm.Corpses = this.Corpses ?? new List<PlayerCorpse>();
+                            this.aimViewForm.CameraManager = Memory.CameraManager;
+                        }
+                        else
+                        {
+                            // レイド外の場合、すべてのデータを確実にクリア
+                            this.aimViewForm.LocalPlayer = null;
+                            this.aimViewForm.AllPlayers = new ReadOnlyDictionary<string, Player>(new Dictionary<string, Player>());
+                            this.aimViewForm.Loot = null;
+                            this.aimViewForm.Grenades = new List<Grenade>();
+                            this.aimViewForm.Tripwires = new List<Tripwire>();
+                            this.aimViewForm.Exfils = new List<Exfil>();
+                            this.aimViewForm.Transits = new List<Transit>();
+                            this.aimViewForm.QuestManager = null;
+                            this.aimViewForm.Corpses = new List<PlayerCorpse>();
+                            this.aimViewForm.CameraManager = null;
+
+                            // 強制的に再描画を要求して画面をクリア
+                            this.aimViewForm.UpdateAndRedraw();
+                            this.aimViewForm.Invalidate();
+                        }
+
+                        // 非表示の場合は表示
+                        if (!this.aimViewForm.Visible)
+                        {
+                            this.aimViewForm.Show();
+                        }
+
+                        // データが初期化されている場合のみ更新を実行
+                        if (isInRaid && Memory.CameraManager != null)
+                        {
+                            this.aimViewForm.UpdateAndRedraw();
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // エラーが発生した場合はAimViewFormを再初期化
+                        try
+                        {
+                            this.aimViewForm.Close();
+                            this.aimViewForm.Dispose();
+                        }
+                        catch { }
+                        this.aimViewForm = null;
+                        this.InitializeAimViewForm();
+                    }
+                }
             }
-            else if (this.aimViewForm != null && !this.aimViewForm.IsDisposed)
+            else
             {
-                this.aimViewForm.Close();
-                this.aimViewForm = null;
+                // AimViewFormが有効な場合は破棄
+                if (this.aimViewForm != null && !this.aimViewForm.IsDisposed)
+                {
+                    this.aimViewForm.Close();
+                    this.aimViewForm.Dispose();
+                    this.aimViewForm = null;
+                }
             }
+        }
+
+        // AimViewFormから呼び出せるようにpublicメソッドを追加
+        public void RestartRadarFromAimView()
+        {
+            this.btnRestartRadar_Click(null, EventArgs.Empty);
         }
     }
 }
