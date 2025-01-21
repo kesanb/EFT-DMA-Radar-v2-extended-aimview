@@ -1,5 +1,4 @@
-﻿
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 
 namespace eft_dma_radar
@@ -480,7 +479,7 @@ namespace eft_dma_radar
 
         public void UpdateViewMatrix()
         {
-            if (this._swRefreshVM.ElapsedMilliseconds >= 10 && Memory.LocalPlayer is not null)
+            if (this._swRefreshVM.ElapsedMilliseconds >= 5 && Memory.LocalPlayer is not null)
             {
                 this._viewMatrix = Memory.ReadValue<Matrix4x4>(this._viewMatrixPtr + Offsets.ViewMatrix.Matrix);
                 this._swRefreshVM.Restart();

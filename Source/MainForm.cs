@@ -127,6 +127,8 @@ namespace eft_dma_radar
             "Zoom Out"
         };
 
+        private AimViewForm aimViewForm;
+
         #region Getters
         /// <summary>
         /// Radar has found Escape From Tarkov process and is ready.
@@ -1246,23 +1248,32 @@ namespace eft_dma_radar
 
         private void UpdateEnemyStats()
         {
-            var playerCounts = this.AllPlayers?
-                .Select(x => x.Value)
-                .Where(x => x.IsAlive && x.IsActive)
+            // AllPlayersがnullの場合は処理をスキップ
+            if (this.AllPlayers == null)
+                return;
+
+            var playerCounts = this.AllPlayers.Values
+                .Where(x => x != null && x.IsActive && x.IsAlive)
                 .GroupBy(x => x.Type)
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            this.UpdateEnemyStatLabel(lblRadarPMCsValue, playerCounts.GetValueOrDefault(PlayerType.USEC, 0) + playerCounts.GetValueOrDefault(PlayerType.BEAR, 0));
-            this.UpdateEnemyStatLabel(lblRadarPlayerScavsValue, playerCounts.GetValueOrDefault(PlayerType.PlayerScav, 0));
-            this.UpdateEnemyStatLabel(lblRadarAIScavsValue, playerCounts.GetValueOrDefault(PlayerType.Scav, 0));
-            this.UpdateEnemyStatLabel(lblRadarRoguesValue, playerCounts.GetValueOrDefault(PlayerType.Raider) +
-                                                      playerCounts.GetValueOrDefault(PlayerType.Rogue) +
-                                                      playerCounts.GetValueOrDefault(PlayerType.BossFollower) +
-                                                      playerCounts.GetValueOrDefault(PlayerType.BossGuard) +
-                                                      playerCounts.GetValueOrDefault(PlayerType.Cultist));
-            this.UpdateEnemyStatLabel(lblRadarBossesValue, playerCounts.GetValueOrDefault(PlayerType.Boss, 0));
-            this.UpdateEnemyStatLabel(lblRadarOtherValue, playerCounts.GetValueOrDefault(PlayerType.FollowerOfMorana) +
-                                                      playerCounts.GetValueOrDefault(PlayerType.Zombie));
+            this.UpdateEnemyStatLabel(lblRadarPMCsValue, 
+                playerCounts.GetValueOrDefault(PlayerType.USEC, 0) + playerCounts.GetValueOrDefault(PlayerType.BEAR, 0));
+            this.UpdateEnemyStatLabel(lblRadarPlayerScavsValue, 
+                playerCounts.GetValueOrDefault(PlayerType.PlayerScav, 0));
+            this.UpdateEnemyStatLabel(lblRadarAIScavsValue, 
+                playerCounts.GetValueOrDefault(PlayerType.Scav, 0));
+            this.UpdateEnemyStatLabel(lblRadarRoguesValue, 
+                playerCounts.GetValueOrDefault(PlayerType.Raider) +
+                playerCounts.GetValueOrDefault(PlayerType.Rogue) +
+                playerCounts.GetValueOrDefault(PlayerType.BossFollower) +
+                playerCounts.GetValueOrDefault(PlayerType.BossGuard) +
+                playerCounts.GetValueOrDefault(PlayerType.Cultist));
+            this.UpdateEnemyStatLabel(lblRadarBossesValue, 
+                playerCounts.GetValueOrDefault(PlayerType.Boss, 0));
+            this.UpdateEnemyStatLabel(lblRadarOtherValue, 
+                playerCounts.GetValueOrDefault(PlayerType.FollowerOfMorana) +
+                playerCounts.GetValueOrDefault(PlayerType.Zombie));
         }
 
         private void UpdateEnemyStatLabel(MaterialLabel label, int count)
@@ -1474,6 +1485,12 @@ namespace eft_dma_radar
 
             if (this.InGame && localPlayer is not null)
             {
+                // AimViewFormのプレイヤーリストを更新
+                if (this.aimViewForm != null && this.AllPlayers != null)
+                {
+                    this.aimViewForm.UpdatePlayerList(this.AllPlayers, localPlayer);
+                }
+
                 var allPlayers = this.AllPlayers?
                         .Select(x => x.Value)
                         .Where(x => x.IsActive && x.IsAlive && !x.HasExfild);
@@ -1948,25 +1965,18 @@ namespace eft_dma_radar
 
         private void DrawAimview(SKCanvas canvas)
         {
-            if (!this.config.AimviewSettings.Enabled || this.AllPlayers is null)
+            if (!this.config.AimviewSettings.Enabled || this.AllPlayers is null || this.LocalPlayer is null)
                 return;
 
-            var aimviewPlayers = this.AllPlayers?
+            var aimviewPlayers = this.AllPlayers
                 .Select(x => x.Value)
-                .Where(x => x.IsActive && x.IsAlive)
+                .Where(x => x != null && x.IsActive && x.IsAlive)
                 .ToList();
 
             if (!aimviewPlayers.Any())
                 return;
 
-            //var primaryTeammateAimviewBounds = this.CalculateAimviewBounds(mcRadarStats.Visible || mcRadarEnemyStats.Visible, mcRadarStats);
-
-            //var primaryTeammate = this.AllPlayers?
-            //    .Select(x => x.Value)
-            //    .FirstOrDefault(x => x.AccountID == txtTeammateID.Text);
-
             this.RenderAimview(canvas, this.LocalPlayer, aimviewPlayers);
-            //this.RenderAimview(canvas, primaryTeammateAimviewBounds, primaryTeammate, aimviewPlayers);
         }
 
         private void DrawToolTips(SKCanvas canvas)
@@ -2082,18 +2092,21 @@ namespace eft_dma_radar
 
         private void RenderAimview(SKCanvas canvas, Player sourcePlayer, IEnumerable<Player> aimviewPlayers)
         {
-            if (sourcePlayer is null || !sourcePlayer.IsActive || !sourcePlayer.IsAlive)
+            if (sourcePlayer is null || !sourcePlayer.IsActive || !sourcePlayer.IsAlive || 
+                aimviewPlayers is null || Memory.CameraManager?.ViewMatrix is null)
                 return;
 
             var aimviewBounds = this.GetAimviewBounds();
             canvas.DrawRect(aimviewBounds, SKPaints.PaintTransparentBacker);
             this.DrawCrosshair(canvas, aimviewBounds);
 
-            if (aimviewPlayers is null || Memory.CameraManager?.ViewMatrix is null)
+            if (aimviewPlayers is null)
                 return;
 
             var myPosition = sourcePlayer.Position;
             var aimviewSettings = this.config.AimviewSettings;
+            if (aimviewSettings?.ObjectSettings is null)
+                return;
 
             // QUEST HELPER
             var questItemSettings = aimviewSettings.ObjectSettings["QuestItem"];
@@ -3103,10 +3116,16 @@ namespace eft_dma_radar
                 this.DrawTransits(canvas);
                 this.DrawPlayers(canvas);
 
-                if (this.config.AimviewSettings.Enabled)
-                    this.DrawAimview(canvas);
+                // AimViewは別ウィンドウで表示するため、ここでは描画しない
+                // this.DrawAimview(canvas);
 
                 this.DrawToolTips(canvas);
+
+                // AimViewFormの更新
+                if (this.aimViewForm != null && !this.aimViewForm.IsDisposed && this.config.AimviewSettings.Enabled)
+                {
+                    this.UpdateAimViewVisibility();
+                }
             }
 
             canvas.Flush();
@@ -3784,8 +3803,10 @@ namespace eft_dma_radar
         // Aimview
         private void swAimview_CheckedChanged(object sender, EventArgs e)
         {
-            this.config.AimviewSettings.Enabled = swAimview.Checked;
+            var enabled = swAimview.Checked;
+            this.config.AimviewSettings.Enabled = enabled;
             this.UpdateAimviewSettings();
+            this.UpdateAimViewVisibility();
         }
 
         private void sldrAVWidth_onValueChanged(object sender, int newValue)
@@ -6510,5 +6531,66 @@ namespace eft_dma_radar
         #endregion
         #endregion
         #endregion
+
+        private void InitializeAimViewForm()
+        {
+            // すでに有効なAimViewFormが存在する場合は初期化をスキップ
+            if (this.aimViewForm != null && !this.aimViewForm.IsDisposed)
+                return;
+
+            this.aimViewForm = new AimViewForm(this.config);
+            // AimViewFormの初期位置をメインフォームの右側に設定
+            this.aimViewForm.Location = new Point(
+                this.Location.X + this.Width,
+                this.Location.Y
+            );
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            // 設定が有効な場合のみ初期化
+            if (this.config.AimviewSettings.Enabled)
+            {
+                this.InitializeAimViewForm();
+            }
+        }
+
+        private void UpdateAimViewVisibility()
+        {
+            if (this.config.AimviewSettings.Enabled)
+            {
+                // データが初期化されているか確認
+                if (Memory.CameraManager == null || this.LocalPlayer == null || this.AllPlayers == null)
+                {
+                    return; // データが準備できていない場合は表示しない
+                }
+
+                if (this.aimViewForm == null || this.aimViewForm.IsDisposed)
+                {
+                    this.InitializeAimViewForm();
+                }
+                
+                // AimViewFormにデータを更新
+                this.aimViewForm.LocalPlayer = this.LocalPlayer;
+                this.aimViewForm.AllPlayers = this.AllPlayers;
+                this.aimViewForm.Loot = this.Loot;
+                this.aimViewForm.Grenades = this.Grenades;
+                this.aimViewForm.Tripwires = this.Tripwires;
+                this.aimViewForm.Exfils = this.Exfils;
+                this.aimViewForm.Transits = this.Transits;
+                this.aimViewForm.QuestManager = this.QuestManager;
+                this.aimViewForm.Corpses = this.Corpses;
+                this.aimViewForm.CameraManager = Memory.CameraManager;
+                
+                this.aimViewForm.Show();
+                this.aimViewForm.UpdateAndRedraw();
+            }
+            else if (this.aimViewForm != null && !this.aimViewForm.IsDisposed)
+            {
+                this.aimViewForm.Close();
+                this.aimViewForm = null;
+            }
+        }
     }
 }
