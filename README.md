@@ -2,7 +2,7 @@
 # EFT-DMA-Radar-v2
 
 ## This Fork is
-[@xx0m](https://github.com/xx0m) improved Aimview, so I separated it and added SkeletonESP and DotESP.
+[@xx0m](https://github.com/xx0m) improved Aimview, so I separated Aimview from the main window and added SkeletonESP and DotESP.
 
 When Aimview is turned on, the AimviewWindow is created, so please adjust it according to your usage. (Maximizing it will hide the title bar.)
 
