@@ -9,12 +9,17 @@ When Aimview is turned on, the AimviewWindow is created, so please adjust it acc
 Additionally, you can toggle the display of various player information using the button in the top left corner.
 Most settings, including colors, are synced with the radar settings.
 
+
 Regarding Skeleton, processing all bones every frame caused a significant drop in performance, so the update frames are limited based on distance.
 It might feel a bit laggy, but it shouldn’t be an issue for regular use.
 If it bothers you, turn off the SK button (useSkeleton) and switch to DotESP instead. It will render more smoothly.
 
 There may still be situations where crashes occur, so I’m asking for testing and feedback.
 Also, I’m a beginner at coding who heavily relies on AI, so if you have any suggestions for organizing or optimizing the code, please feel free to share them.
+
+![image](https://github.com/user-attachments/assets/0236e630-5f9c-43f6-b219-58c3b92ede17)
+![image](https://github.com/user-attachments/assets/6e634682-accf-444e-bcc8-043709d71394)
+
 
 ## Description
 EFT DMA Radar is a radar tool designed for Escape from Tarkov that provides real-time tracking of players and items on a 2D map.
