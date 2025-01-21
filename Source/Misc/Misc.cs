@@ -197,6 +197,7 @@ namespace eft_dma_radar
         public bool useSkeleton { get; set; } = false;
         public bool showWeaponInfo { get; set; } = true;
         public bool showHealthInfo { get; set; } = true;
+        public bool useTransparentBackground { get; set; } = false;
         public Dictionary<string, AimviewObjectSettings> ObjectSettings { get; set; }
 
         public AimviewSettings(bool enabled, int width, int height, int x, int y, string teammateID, Dictionary<string, AimviewObjectSettings> objectSettings)
@@ -211,6 +212,7 @@ namespace eft_dma_radar
             this.useSkeleton = false;
             this.showWeaponInfo = true;
             this.showHealthInfo = true;
+            this.useTransparentBackground = false;
             this.ObjectSettings = objectSettings ?? Config.DefaultAimviewObjectSettings;
         }
     }

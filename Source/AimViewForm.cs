@@ -52,8 +52,9 @@ namespace eft_dma_radar
             this.Text = "AimView";
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.TopMost = true;
-            this.BackColor = Color.Black;
-            this.TransparencyKey = Color.Black;
+            
+            // 背景色の設定
+            UpdateBackgroundColor();
 
             // クロスヘアの状態を設定ファイルから読み込む
             this.showCrosshair = this.config.AimviewSettings.ShowCrosshair;
@@ -239,6 +240,20 @@ namespace eft_dma_radar
             this.Visible = config.AimviewSettings.Enabled;
         }
 
+        private void UpdateBackgroundColor()
+        {
+            if (this.config.AimviewSettings.useTransparentBackground)
+            {
+                this.BackColor = Color.Black; // 透明化のために黒を使用
+                this.TransparencyKey = Color.Black;
+            }
+            else
+            {
+                this.BackColor = Color.Black;
+                this.TransparencyKey = Color.Empty; // 透明化を無効化
+            }
+        }
+
         protected override void OnVisibleChanged(EventArgs e)
         {
             base.OnVisibleChanged(e);
@@ -263,7 +278,16 @@ namespace eft_dma_radar
                 return;
 
             var canvas = e.Surface.Canvas;
-            canvas.Clear(SKColors.Transparent); // キャンバスを透明でクリア
+            
+            // 背景色の設定に応じてキャンバスをクリア
+            if (this.config.AimviewSettings.useTransparentBackground)
+            {
+                canvas.Clear(SKColors.Transparent);
+            }
+            else
+            {
+                canvas.Clear(new SKColor(0, 0, 0, 255)); // 完全な黒で不透明に設定
+            }
 
             lock (this.renderLock)
             {
