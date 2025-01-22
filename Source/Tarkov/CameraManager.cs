@@ -479,7 +479,7 @@ namespace eft_dma_radar
 
         public void UpdateViewMatrix()
         {
-            if (this._swRefreshVM.ElapsedMilliseconds >= 5 && Memory.LocalPlayer is not null)
+            if (this._swRefreshVM.ElapsedMilliseconds >= 10 && Memory.LocalPlayer is not null && Memory.IsValidPtr(this._viewMatrixPtr))
             {
                 this._viewMatrix = Memory.ReadValue<Matrix4x4>(this._viewMatrixPtr + Offsets.ViewMatrix.Matrix);
                 this._swRefreshVM.Restart();

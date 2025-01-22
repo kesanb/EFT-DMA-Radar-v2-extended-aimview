@@ -416,12 +416,9 @@ namespace eft_dma_radar
                         if (checkBones && player.IsActive && player.IsAlive)
                             if (player.Bones.TryGetValue(PlayerBones.HumanHead, out var bone))
                             {
-                                if (bone.InvalidBonePtr)
-                                    player.RefreshBoneTransforms(); // re-read all bone ptrs
-                                else
-                                    bone.UpdatePosition(); // update head only
+                                if (!bone.UpdatePosition()) // update head only
+                                    player.RefreshBoneTransforms();
                             }
-                                
 
                         if (checkWeaponInfo && !player.IsZombie)
                         {
@@ -429,19 +426,19 @@ namespace eft_dma_radar
                             {
                                 scatterMap.Results[i][9].TryGetResult<ulong>(out var currentItem);
                                 scatterMap.Results[i][11].TryGetResult<ulong>(out var itemIDPtr);
-                                    if (itemIDPtr != 0)
-                                    {
-                                        var slotsRefreshed = player.GearManager.CheckGearSlots();
-                                        var itemID = Memory.ReadUnityString(itemIDPtr);
-                                        var gearItem = player.GearManager.GearItems.FirstOrDefault(x => x.ID == itemID);
+                                if (itemIDPtr != 0)
+                                {
+                                    var slotsRefreshed = player.GearManager.CheckGearSlots();
+                                    var itemID = Memory.ReadUnityString(itemIDPtr);
+                                    var gearItem = player.GearManager.GearItems.FirstOrDefault(x => x.ID == itemID);
 
-                                        if (!slotsRefreshed.Any(x => x.Pointer == gearItem.Slot.Pointer))
-                                            player.GearManager.RefreshActiveWeaponAmmoInfo(currentItem, itemID);
+                                    if (!slotsRefreshed.Any(x => x.Pointer == gearItem.Slot.Pointer))
+                                        player.GearManager.RefreshActiveWeaponAmmoInfo(currentItem, itemID);
 
-                                        player.UpdateItemInHands();
-                                    }
+                                    player.UpdateItemInHands();
+                                }
 
-                                    player.CheckForRequiredGear();
+                                player.CheckForRequiredGear();
                             }
                             catch { }
                         }

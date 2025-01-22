@@ -877,7 +877,7 @@ namespace eft_dma_radar
             sldrSunIntensity.Value = this.config.WorldSettings.SunLightIntensity;
             swMoonIntensity.Checked = this.config.WorldSettings.MoonLight;
             sldrMoonIntensity.Enabled = this.config.WorldSettings.MoonLight;
-            sldrSunIntensity.Value = this.config.WorldSettings.SunLightIntensity;
+            sldrMoonIntensity.Value = this.config.WorldSettings.MoonLightIntensity;
 
             swFreezeTime.Checked = this.config.WorldSettings.FreezeTime;
             sldrTimeOfDay.Enabled = this.config.WorldSettings.FreezeTime;
@@ -1255,7 +1255,8 @@ namespace eft_dma_radar
             var playerCounts = this.AllPlayers.Values
                 .Where(x => x != null && x.IsActive && x.IsAlive)
                 .GroupBy(x => x.Type)
-                .ToDictionary(g => g.Key, g => g.Count());
+                .ToDictionary(g => g.Key, g => g.Count())
+                ?? new Dictionary<PlayerType, int>();
 
             this.UpdateEnemyStatLabel(lblRadarPMCsValue, 
                 playerCounts.GetValueOrDefault(PlayerType.USEC, 0) + playerCounts.GetValueOrDefault(PlayerType.BEAR, 0));

@@ -298,12 +298,20 @@ namespace eft_dma_radar
             }
             catch (Exception ex)
             {
+                this._errors++;
                 Program.Log($"Bone failed transform.GetPosition, attempting to get new transform");
                 try
                 {
                     this._transform  = new Transform(this._pointer);
                 }
                 catch { }
+
+                if (this._errors >= 5)
+                {
+                    Program.Log("Too many bone failures, re-reading all bones.");
+                    this._errors = 0;
+                    return false;
+                }
 
                 return false;
             }
