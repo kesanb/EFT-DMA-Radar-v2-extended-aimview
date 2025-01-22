@@ -185,6 +185,13 @@ namespace eft_dma_radar
         }
     }
 
+    public enum CrosshairStyle
+    {
+        None,           // クロスヘア非表示
+        Cross,          // 十字線のみ
+        Circle         // サークルのみ
+    }
+
     public class AimviewSettings
     {
         public bool Enabled { get; set; }
@@ -193,7 +200,8 @@ namespace eft_dma_radar
         public int X { get; set; }
         public int Y { get; set; }
         public string TeammateID { get; set; }
-        public bool ShowCrosshair { get; set; } = true;
+        public CrosshairStyle CrosshairStyle { get; set; } = CrosshairStyle.Cross;  // デフォルトは十字線
+        public float CircleRadius { get; set; } = 20.0f;  // サークルの半径（デフォルト値: 20.0）
         public bool useSkeleton { get; set; } = false;
         public bool showWeaponInfo { get; set; } = true;
         public bool showHealthInfo { get; set; } = true;
@@ -208,7 +216,8 @@ namespace eft_dma_radar
             this.X = x;
             this.Y = y;
             this.TeammateID = teammateID;
-            this.ShowCrosshair = true;
+            this.CrosshairStyle = CrosshairStyle.Cross;
+            this.CircleRadius = 20.0f;
             this.useSkeleton = false;
             this.showWeaponInfo = true;
             this.showHealthInfo = true;

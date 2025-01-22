@@ -20,7 +20,6 @@ namespace eft_dma_radar
         private Button btnToggleHealth;
         private Button btnToggleMaximize;
         private Button btnRefresh;
-        private bool showCrosshair = true;
         private FormBorderStyle previousBorderStyle;
         private bool wasTopMost;
         private readonly Dictionary<string, int> _playerUpdateFrames = new();
@@ -56,9 +55,6 @@ namespace eft_dma_radar
             // 背景色の設定
             UpdateBackgroundColor();
 
-            // クロスヘアの状態を設定ファイルから読み込む
-            this.showCrosshair = this.config.AimviewSettings.ShowCrosshair;
-
             // 最大化切り替えボタンの設定
             this.btnToggleMaximize = new Button
             {
@@ -88,7 +84,7 @@ namespace eft_dma_radar
             this.btnRefresh.Font = new Font("Segoe UI", 10f);
             this.btnRefresh.Click += BtnRefresh_Click;
 
-            // クロスヘア切り替えボタンの設定
+            // クロスヘア切り替えボタンの設定を修正
             this.btnToggleCrosshair = new Button
             {
                 Text = "CH",
@@ -96,16 +92,15 @@ namespace eft_dma_radar
                 Location = new Point(55, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.showCrosshair ? Color.LimeGreen : Color.Red,
+                ForeColor = this.GetCrosshairButtonColor(),
                 Cursor = Cursors.Hand
             };
             this.btnToggleCrosshair.FlatAppearance.BorderSize = 0;
             this.btnToggleCrosshair.Click += (s, e) =>
             {
-                this.showCrosshair = !this.showCrosshair;
-                this.btnToggleCrosshair.ForeColor = this.showCrosshair ? Color.LimeGreen : Color.Red;
-                // 設定ファイルに保存
-                this.config.AimviewSettings.ShowCrosshair = this.showCrosshair;
+                // クロスヘアスタイルを切り替え
+                this.config.AimviewSettings.CrosshairStyle = (CrosshairStyle)(((int)this.config.AimviewSettings.CrosshairStyle + 1) % 3);
+                this.btnToggleCrosshair.ForeColor = this.GetCrosshairButtonColor();
                 this.aimViewCanvas.Invalidate();
             };
 
@@ -313,11 +308,7 @@ namespace eft_dma_radar
             if (this.LocalPlayer == null || this.AllPlayers == null || this.CameraManager?.ViewMatrix == null)
             {
                 // クロスヘアのみ描画
-                if (this.showCrosshair)
-                {
-                    var bounds = this.GetAimviewBounds();
-                    this.DrawCrosshair(canvas, bounds);
-                }
+                this.DrawCrosshair(canvas, this.GetAimviewBounds());
                 return;
             }
 
@@ -326,10 +317,7 @@ namespace eft_dma_radar
             var aimviewSettings = this.config.AimviewSettings;
 
             // クロスヘアの描画（最適化：条件チェックを1回に）
-            if (this.showCrosshair)
-            {
-                this.DrawCrosshair(canvas, aimviewBounds);
-            }
+            this.DrawCrosshair(canvas, aimviewBounds);
 
             // RENDER PLAYERS - with skeleton
             var playerSettings = aimviewSettings.ObjectSettings["Player"];
@@ -372,7 +360,8 @@ namespace eft_dma_radar
                 (containerSettings?.Enabled ?? false) || 
                 (corpseSettings?.Enabled ?? false))
             {
-                if (this.config.ProcessLoot && this.Loot?.Filter != null)
+                // レイド中かつLootが有効な場合のみ描画を行う
+                if (this.config.ProcessLoot && this.Loot?.Filter != null && this.LocalPlayer != null && this.CameraManager?.ViewMatrix != null)
                 {
                     var maxLootDistance = Math.Max(
                         Math.Max(
@@ -683,21 +672,36 @@ namespace eft_dma_radar
 
         private void DrawCrosshair(SKCanvas canvas, SKRect drawingLocation)
         {
-            canvas.DrawLine(
-                drawingLocation.Left,
-                drawingLocation.Bottom - (this.config.AimviewSettings.Height / 2),
-                drawingLocation.Right,
-                drawingLocation.Bottom - (this.config.AimviewSettings.Height / 2),
-                SKPaints.PaintAimviewCrosshair
-            );
+            if (this.config.AimviewSettings.CrosshairStyle == CrosshairStyle.None)
+                return;
 
-            canvas.DrawLine(
-                drawingLocation.Right - (this.config.AimviewSettings.Width / 2),
-                drawingLocation.Top,
-                drawingLocation.Right - (this.config.AimviewSettings.Width / 2),
-                drawingLocation.Bottom,
-                SKPaints.PaintAimviewCrosshair
-            );
+            float centerX = drawingLocation.Right - (this.config.AimviewSettings.Width / 2);
+            float centerY = drawingLocation.Bottom - (this.config.AimviewSettings.Height / 2);
+
+            // 十字線の描画
+            if (this.config.AimviewSettings.CrosshairStyle == CrosshairStyle.Cross)
+            {
+                canvas.DrawLine(
+                    drawingLocation.Left,
+                    drawingLocation.Bottom - (this.config.AimviewSettings.Height / 2),
+                    drawingLocation.Right,
+                    drawingLocation.Bottom - (this.config.AimviewSettings.Height / 2),
+                    SKPaints.PaintAimviewCrosshair
+                );
+
+                canvas.DrawLine(
+                    drawingLocation.Right - (this.config.AimviewSettings.Width / 2),
+                    drawingLocation.Top,
+                    drawingLocation.Right - (this.config.AimviewSettings.Width / 2),
+                    drawingLocation.Bottom,
+                    SKPaints.PaintAimviewCrosshair
+                );
+            }
+            // サークルの描画
+            else if (this.config.AimviewSettings.CrosshairStyle == CrosshairStyle.Circle)
+            {
+                canvas.DrawCircle(centerX, centerY, this.config.AimviewSettings.CircleRadius * this.uiScale, SKPaints.PaintAimviewCrosshair);
+            }
         }
 
         private float CalculateObjectSize(float distance, bool isText = false)
@@ -1091,6 +1095,17 @@ namespace eft_dma_radar
         private void BtnRefresh_Click(object sender, EventArgs e)
         {
             OnRestartRadarRequested?.Invoke();
+        }
+
+        private Color GetCrosshairButtonColor()
+        {
+            return this.config.AimviewSettings.CrosshairStyle switch
+            {
+                CrosshairStyle.None => Color.Red,
+                CrosshairStyle.Cross => Color.LimeGreen,
+                CrosshairStyle.Circle => Color.Yellow,
+                _ => Color.Red
+            };
         }
     }
 } 
