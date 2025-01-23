@@ -312,42 +312,70 @@ namespace eft_dma_radar
                 return;
             }
 
+            // レイド中かどうかの確認
+            if (!Memory.Ready || !Memory.InGame)
+            {
+                // クロスヘアのみ描画
+                this.DrawCrosshair(canvas, this.GetAimviewBounds());
+                return;
+            }
+
             var aimviewBounds = this.GetAimviewBounds();
-            var myPosition = this.LocalPlayer.Position;
+            Vector3 myPosition;
+            try
+            {
+                myPosition = this.LocalPlayer.Position;
+            }
+            catch
+            {
+                // Position取得に失敗した場合は描画を中止
+                this.DrawCrosshair(canvas, aimviewBounds);
+                return;
+            }
+
             var aimviewSettings = this.config.AimviewSettings;
 
-            // クロスヘアの描画（最適化：条件チェックを1回に）
+            // クロスヘアの描画
             this.DrawCrosshair(canvas, aimviewBounds);
 
             // RENDER PLAYERS - with skeleton
             var playerSettings = aimviewSettings.ObjectSettings["Player"];
             if (playerSettings != null && playerSettings.Enabled)
             {
-                var maxDistance = Math.Max(playerSettings.PaintDistance, playerSettings.TextDistance);
-                var activePlayers = this.AllPlayers
-                    .Select(x => x.Value)
-                    .Where(p => p != null && p != this.LocalPlayer && p.IsActive && p.IsAlive)
-                    .Where(p => Vector3.Distance(myPosition, p.Position) <= maxDistance)
-                    .ToList();
-
-                foreach (var player in activePlayers)
+                // プレイヤーデータが有効な場合のみ描画を行う
+                // LocalPlayerとAllPlayersの存在チェックを優先し、より柔軟な条件にする
+                if (this.LocalPlayer != null && this.AllPlayers != null && this.CameraManager?.ViewMatrix != null)
                 {
-                    var dist = Vector3.Distance(myPosition, player.Position);
+                    var maxDistance = Math.Max(playerSettings.PaintDistance, playerSettings.TextDistance);
+                    var activePlayers = this.AllPlayers
+                        .Select(x => x.Value)
+                        .Where(p => p != null && p != this.LocalPlayer && p.IsActive && p.IsAlive)
+                        .Where(p => Vector3.Distance(myPosition, p.Position) <= maxDistance)
+                        .ToList();
 
-                    // プレイヤーのボーン情報を確認（最適化：早期リターン）
-                    if (player.Bones == null || player.Bones.Count == 0)
-                        continue;
-
-                    // 骨盤の位置を基準点として使用
-                    if (!player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
-                        continue;
-
-                    if (!this.TryGetScreenPosition(pelvisBone.Position, aimviewBounds, out Vector2 screenPos))
-                        continue;
-
-                    if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
+                    // プレイヤーが見つかった場合のみ描画処理を続行
+                    if (activePlayers.Any())
                     {
-                        this.DrawAimviewPlayer(canvas, player, screenPos, dist, playerSettings);
+                        foreach (var player in activePlayers)
+                        {
+                            var dist = Vector3.Distance(myPosition, player.Position);
+
+                            // プレイヤーのボーン情報を確認（最適化：早期リターン）
+                            if (player.Bones == null || player.Bones.Count == 0)
+                                continue;
+
+                            // 骨盤の位置を基準点として使用
+                            if (!player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
+                                continue;
+
+                            if (!this.TryGetScreenPosition(pelvisBone.Position, aimviewBounds, out Vector2 screenPos))
+                                continue;
+
+                            if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
+                            {
+                                this.DrawAimviewPlayer(canvas, player, screenPos, dist, playerSettings);
+                            }
+                        }
                     }
                 }
             }
@@ -501,7 +529,8 @@ namespace eft_dma_radar
 
                 if (objectSettings.Value)
                 {
-                    canvas.DrawText($"{item.Item.basePrice:N0}₽", screenPos.X, currentY + textPaint.TextSize, textPaint);
+                    var itemValue = TarkovDevManager.GetItemValue(item.Item);
+                    canvas.DrawText($"{itemValue:N0}₽", screenPos.X, currentY + textPaint.TextSize, textPaint);
                     currentY += textPaint.TextSize * this.uiScale;
                 }
 
@@ -645,19 +674,28 @@ namespace eft_dma_radar
         {
             screenPosition = Vector2.Zero;
 
-            // ViewMatrixのnullチェック
-            if (this.CameraManager == null || this.CameraManager.ViewMatrix == null)
-                return false;
-
-            var isVisible = Extensions.WorldToScreen(worldPosition, (int)bounds.Width, (int)bounds.Height, out screenPosition);
-
-            if (isVisible)
+            try
             {
-                screenPosition.X += bounds.Left;
-                screenPosition.Y += bounds.Top;
-            }
+                // ViewMatrixとCameraManagerの完全性チェック
+                if (this.CameraManager == null || this.CameraManager.ViewMatrix == null || !Memory.Ready || !Memory.InGame)
+                {
+                    return false;
+                }
 
-            return isVisible;
+                var isVisible = Extensions.WorldToScreen(worldPosition, (int)bounds.Width, (int)bounds.Height, out screenPosition);
+
+                if (isVisible)
+                {
+                    screenPosition.X += bounds.Left;
+                    screenPosition.Y += bounds.Top;
+                }
+
+                return isVisible;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private SKRect GetAimviewBounds()

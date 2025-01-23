@@ -6581,7 +6581,7 @@ namespace eft_dma_radar
                         {
                             // レイド中の場合、通常のデータ更新
                             this.aimViewForm.LocalPlayer = this.LocalPlayer;
-                            this.aimViewForm.AllPlayers = this.AllPlayers ?? new ReadOnlyDictionary<string, Player>(new Dictionary<string, Player>());
+                            this.aimViewForm.AllPlayers = this.AllPlayers;
                             this.aimViewForm.Loot = this.Loot;
                             this.aimViewForm.Grenades = this.Grenades ?? new List<Grenade>();
                             this.aimViewForm.Tripwires = this.Tripwires ?? new List<Tripwire>();
@@ -6590,6 +6590,12 @@ namespace eft_dma_radar
                             this.aimViewForm.QuestManager = this.QuestManager;
                             this.aimViewForm.Corpses = this.Corpses ?? new List<PlayerCorpse>();
                             this.aimViewForm.CameraManager = Memory.CameraManager;
+
+                            // データが初期化されている場合のみ更新を実行
+                            if (Memory.CameraManager != null)
+                            {
+                                this.aimViewForm.UpdateAndRedraw();
+                            }
                         }
                         else
                         {
