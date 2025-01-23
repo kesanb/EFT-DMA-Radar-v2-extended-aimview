@@ -2,6 +2,8 @@ using System.Numerics;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
+using System.Linq;
 
 namespace eft_dma_radar
 {
@@ -13,7 +15,7 @@ namespace eft_dma_radar
         private float uiScale = 1.0f;
         private const float AIMVIEW_OBJECT_SPACING = 4f;
         private Button btnToggleCrosshair;
-        private Button btnToggleSkeleton;
+        private Button btnToggleESPstyle;
         private Button btnToggleName;
         private Button btnToggleDistance;
         private Button btnToggleWeapon;
@@ -26,7 +28,6 @@ namespace eft_dma_radar
         private int _currentFrame = 0;
         private Matrix4x4? _lastViewMatrix;
         private const float RAPID_MOVEMENT_THRESHOLD = 0.1f; // 急速な動きの閾値
-
 
         // ESPに必要なデータを保持するプロパティ
         public Player LocalPlayer { get; set; }
@@ -42,6 +43,19 @@ namespace eft_dma_radar
 
         // RestartRadarのコールバック
         public Action OnRestartRadarRequested { get; set; }
+
+        // キャッシュシステムの追加
+        private readonly ConcurrentDictionary<string, SKPaint> _paintCache = new();
+        private readonly ConcurrentDictionary<string, DateTime> _lastUpdateTime = new();
+        private readonly ConcurrentDictionary<string, Vector2> _lastPositions = new();
+        private DateTime _lastCleanupTime = DateTime.Now;
+        private const int CLEANUP_INTERVAL_MS = 5000; // 5秒ごとにクリーンアップ
+
+        // メモリプール用の静的フィールド
+        private static readonly ConcurrentDictionary<string, Queue<SKPaint>> _paintPool = new();
+        private static readonly ConcurrentDictionary<string, Queue<SKPath>> _pathPool = new();
+        private const int POOL_SIZE = 100;
+        private const int MAX_CACHED_OBJECTS = 1000;
 
         public AimViewForm(Config config)
         {
@@ -105,21 +119,23 @@ namespace eft_dma_radar
             };
 
             // スケルトン切り替えボタンの設定
-            this.btnToggleSkeleton = new Button
+            this.btnToggleESPstyle = new Button
             {
-                Text = "SK",
+                Text = GetESPButtonText(),
                 Size = new Size(30, 20),
                 Location = new Point(90, 5),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.config.AimviewSettings.useSkeleton ? Color.LimeGreen : Color.Red,
+                ForeColor = GetESPButtonColor(),
                 Cursor = Cursors.Hand
             };
-            this.btnToggleSkeleton.FlatAppearance.BorderSize = 0;
-            this.btnToggleSkeleton.Click += (s, e) =>
+            this.btnToggleESPstyle.FlatAppearance.BorderSize = 0;
+            this.btnToggleESPstyle.Click += (s, e) =>
             {
-                this.config.AimviewSettings.useSkeleton = !this.config.AimviewSettings.useSkeleton;
-                this.btnToggleSkeleton.ForeColor = this.config.AimviewSettings.useSkeleton ? Color.LimeGreen : Color.Red;
+                // ESPスタイルを切り替え
+                this.config.AimviewSettings.ESPStyle = (ESPStyle)(((int)this.config.AimviewSettings.ESPStyle + 1) % 3);
+                this.btnToggleESPstyle.Text = GetESPButtonText();
+                this.btnToggleESPstyle.ForeColor = GetESPButtonColor();
                 this.aimViewCanvas.Invalidate();
             };
 
@@ -210,7 +226,7 @@ namespace eft_dma_radar
             // コントロールの追加
             this.Controls.Add(this.aimViewCanvas);
             this.Controls.Add(this.btnToggleCrosshair);
-            this.Controls.Add(this.btnToggleSkeleton);
+            this.Controls.Add(this.btnToggleESPstyle);
             this.Controls.Add(this.btnToggleName);
             this.Controls.Add(this.btnToggleWeapon);
             this.Controls.Add(this.btnToggleHealth);
@@ -223,7 +239,7 @@ namespace eft_dma_radar
             this.btnToggleHealth.BringToFront();
             this.btnToggleWeapon.BringToFront();
             this.btnToggleName.BringToFront();
-            this.btnToggleSkeleton.BringToFront();
+            this.btnToggleESPstyle.BringToFront();
             this.btnToggleCrosshair.BringToFront();
             
             // イベントハンドラの設定
@@ -788,15 +804,45 @@ namespace eft_dma_radar
 
         private void DrawAimviewPlayer(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
         {
-            // スケルトン表示の使用有無に応じて適切なメソッドを呼び出す
-            if (this.config.AimviewSettings.useSkeleton)
+            if (distance >= Math.Max(objectSettings.PaintDistance, objectSettings.TextDistance))
+                return;
+
+            // キャッシュされたペイントを使用
+            var paint = GetCachedPaint(player);
+            Vector2 textPosition = screenPos;
+            bool isWithinPaintDistance = distance < objectSettings.PaintDistance;
+            bool isWithinTextDistance = distance < objectSettings.TextDistance;
+
+            // 位置の更新が必要かチェック
+            bool shouldUpdate = ShouldUpdatePosition(player.ProfileID, distance);
+
+            if (isWithinPaintDistance)
             {
-                DrawAimviewPlayerSkeleton(canvas, player, screenPos, distance, objectSettings);
+                switch (this.config.AimviewSettings.ESPStyle)
+                {
+                    case ESPStyle.Skeleton:
+                        DrawAimviewPlayerSkeleton(canvas, player, screenPos, distance, objectSettings, shouldUpdate);
+                        break;
+                    case ESPStyle.Box:
+                        textPosition = DrawAimviewPlayerBox(canvas, player, distance, objectSettings, shouldUpdate);
+                        if (textPosition == Vector2.Zero)
+                            return;
+                        break;
+                    case ESPStyle.Dot:
+                        DrawAimviewPlayerDot(canvas, player, screenPos, distance, objectSettings, shouldUpdate);
+                        break;
+                }
             }
-            else
+
+            if (isWithinTextDistance && (objectSettings.Distance || objectSettings.Name || 
+                this.config.AimviewSettings.showWeaponInfo || 
+                this.config.AimviewSettings.showHealthInfo))
             {
-                DrawAimviewPlayerDot(canvas, player, screenPos, distance, objectSettings);
+                DrawPlayerTextInfo(canvas, player, distance, textPosition, objectSettings);
             }
+
+            // 定期的なキャッシュのクリーンアップ
+            CleanupCaches();
         }
 
         private void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings)
@@ -808,17 +854,17 @@ namespace eft_dma_radar
             textPaint.TextSize = this.CalculateFontSize(distance);
             textPaint.TextAlign = SKTextAlign.Left;
             var textX = screenPos.X + 20;
-            var currentY = screenPos.Y + 20;  // 基準点から下に20ピクセル移動
+            var currentY = screenPos.Y + 20;
 
-            // 名前を表示（Settings.jsonのName設定を参照）
+            // 名前の描画
             if (objectSettings.Name && !string.IsNullOrEmpty(player.Name))
             {
                 // プレイヤー名を描画
                 canvas.DrawText(player.Name, textX, currentY, textPaint);
                 
-                // アンダーラインを描画
+                // アンダーラインを描画（プレイヤー名の強調）
                 float textWidth = textPaint.MeasureText(player.Name);
-                var underlinePaint = new SKPaint
+                using var underlinePaint = new SKPaint
                 {
                     Color = textPaint.Color,
                     StrokeWidth = 1,
@@ -829,8 +875,10 @@ namespace eft_dma_radar
                 currentY += textPaint.TextSize * this.uiScale;
             }
 
-            // 武器情報を表示
-            if (this.config.AimviewSettings.showWeaponInfo && player.ItemInHands.Item is not null && !string.IsNullOrEmpty(player.ItemInHands.Item.Short))
+            // 武器情報の描画
+            if (this.config.AimviewSettings.showWeaponInfo && 
+                player.ItemInHands.Item is not null && 
+                !string.IsNullOrEmpty(player.ItemInHands.Item.Short))
             {
                 var weaponText = player.ItemInHands.Item.Short;
                 if (!string.IsNullOrEmpty(player.ItemInHands.Item.GearInfo.AmmoType))
@@ -843,22 +891,25 @@ namespace eft_dma_radar
                 currentY += textPaint.TextSize * this.uiScale;
             }
 
-            // ヘルス情報を表示
+            // ヘルス情報の描画
             if (this.config.AimviewSettings.showHealthInfo && !string.IsNullOrEmpty(player.HealthStatus))
             {
                 canvas.DrawText(player.HealthStatus, textX, currentY, textPaint);
                 currentY += textPaint.TextSize * this.uiScale;
             }
 
-            // 距離を表示（Settings.jsonのDistance設定を参照）
+            // 距離情報の描画
             if (objectSettings.Distance)
             {
                 canvas.DrawText($"{distance:F0}m", textX, currentY, textPaint);
             }
         }
 
-        private void DrawAimviewPlayerDot(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
+        private void DrawAimviewPlayerDot(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings, bool shouldUpdate)
         {
+            if (distance >= objectSettings.PaintDistance)
+                return;
+
             // プレイヤーの位置を骨盤の位置から取得
             if (player?.Bones == null || !player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
                 return;
@@ -871,190 +922,128 @@ namespace eft_dma_radar
             if (!this.TryGetScreenPosition(pelvisBone.Position, bounds, out Vector2 pelvisScreenPos))
                 return;
 
-            if (distance < objectSettings.PaintDistance)
-            {
-                var paint = player.GetAimviewPaint();
-                paint.Style = SKPaintStyle.Fill;
-                
-                var dotSize = CalculateDistanceBasedSize(distance);
-                canvas.DrawCircle(pelvisScreenPos.X, pelvisScreenPos.Y, dotSize, paint);
-            }
+            var paint = player.GetAimviewPaint();
+            paint.Style = SKPaintStyle.Fill;
+            
+            var dotSize = CalculateDistanceBasedSize(distance);
+            canvas.DrawCircle(pelvisScreenPos.X, pelvisScreenPos.Y, dotSize, paint);
+        }
+        
+        private Vector2 DrawAimviewPlayerBox(SKCanvas canvas, Player player, float distance, AimviewObjectSettings objectSettings, bool shouldUpdate)
+        {
+            if (player?.Bones == null || distance >= objectSettings.PaintDistance)
+                return Vector2.Zero;
 
-            // テキスト情報の表示
-            DrawPlayerTextInfo(canvas, player, distance, pelvisScreenPos, objectSettings);
+            // 頭とベースのボーンの位置を取得
+            if (!player.Bones.TryGetValue(PlayerBones.HumanHead, out var headBone) ||
+                !player.Bones.TryGetValue(PlayerBones.HumanBase, out var baseBone))
+                return Vector2.Zero;
+
+            // ボーンの位置を更新
+            headBone.UpdatePosition();
+            baseBone.UpdatePosition();
+
+            var bounds = this.GetAimviewBounds();
+            if (!TryGetScreenPosition(headBone.Position, bounds, out Vector2 headScreenPos) ||
+                !TryGetScreenPosition(baseBone.Position, bounds, out Vector2 baseScreenPos))
+                return Vector2.Zero;
+
+            // ボックスのサイズを計算（距離に応じて調整）
+            float height = baseScreenPos.Y - headScreenPos.Y;
+            float width = height * 0.4f;
+
+            using var paint = player.GetAimviewPaint();
+            paint.Style = SKPaintStyle.Stroke;
+            paint.StrokeWidth = Math.Max(1f, 2f * (1f - distance / objectSettings.PaintDistance));
+
+            var boxRect = SKRect.Create(
+                headScreenPos.X - width / 2,
+                headScreenPos.Y,
+                width,
+                height
+            );
+
+            canvas.DrawRect(boxRect, paint);
+
+            return baseScreenPos;
         }
 
-        private void DrawAimviewPlayerSkeleton(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
+        private void DrawAimviewPlayerSkeleton(SKCanvas canvas, Player player, Vector2 screenPos, float distance, 
+            AimviewObjectSettings objectSettings, bool shouldUpdate)
         {
-            // 既存のスケルトン描画コードをここに移動
-            if (player?.Bones == null || objectSettings == null)
+            if (player?.Bones == null || distance >= objectSettings.PaintDistance)
                 return;
 
-            if (distance < objectSettings.PaintDistance)
+            var paint = GetCachedPaint(player);
+            paint.Style = SKPaintStyle.Stroke;
+            paint.StrokeWidth = CalculateLineWidth(distance);
+            paint.Color = paint.Color.WithAlpha(200);
+
+            var bounds = GetAimviewBounds();
+            var bonePositions = new Dictionary<PlayerBones, Vector2>();
+
+            // ボーンの位置を更新（キャッシュを使用）
+            if (shouldUpdate)
             {
-                var paint = player.GetAimviewPaint();
+                foreach (var bone in player.Bones)
+                {
+                    bone.Value.UpdatePosition();
+                    if (TryGetScreenPosition(bone.Value.Position, bounds, out Vector2 pos))
+                    {
+                        bonePositions[bone.Key] = pos;
+                        _lastPositions[$"{player.ProfileID}_{bone.Key}"] = pos;
+                    }
+                }
+            }
+            else
+            {
+                foreach (var bone in player.Bones)
+                {
+                    if (_lastPositions.TryGetValue($"{player.ProfileID}_{bone.Key}", out Vector2 pos))
+                    {
+                        bonePositions[bone.Key] = pos;
+                    }
+                }
+            }
+
+            // ボーンの接続を描画
+            var boneConnections = new (PlayerBones start, PlayerBones end)[]
+            {
+                (PlayerBones.HumanPelvis, PlayerBones.HumanSpine3),
+                (PlayerBones.HumanSpine3, PlayerBones.HumanHead),
+                (PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1),
+                (PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm),
+                (PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1),
+                (PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm),
+                (PlayerBones.HumanPelvis, PlayerBones.HumanLCalf),
+                (PlayerBones.HumanLCalf, PlayerBones.HumanLFoot),
+                (PlayerBones.HumanPelvis, PlayerBones.HumanRCalf),
+                (PlayerBones.HumanRCalf, PlayerBones.HumanRFoot)
+            };
+
+            foreach (var connection in boneConnections)
+            {
+                if (bonePositions.TryGetValue(connection.start, out var startPos) &&
+                    bonePositions.TryGetValue(connection.end, out var endPos))
+                {
+                    // 線の太さを距離に応じて調整
+                    paint.StrokeWidth = CalculateLineWidth(distance);
+                    canvas.DrawLine(startPos.X, startPos.Y, endPos.X, endPos.Y, paint);
+                }
+            }
+
+            // 頭部を円で描画
+            if (bonePositions.TryGetValue(PlayerBones.HumanHead, out var headPos))
+            {
+                var headSize = CalculateDistanceBasedSize(distance);
                 paint.Style = SKPaintStyle.Stroke;
-                paint.StrokeWidth = 2.0f;
-                paint.Color = paint.Color.WithAlpha(200);
-
-                // 距離に応じて更新頻度を決定
-                var updateFrequency = GetUpdateFrequency(distance);
-                var playerId = player.ProfileID;
-
-                if (string.IsNullOrEmpty(playerId))
-                    return;
-
-                if (!_playerUpdateFrames.ContainsKey(playerId))
-                {
-                    _playerUpdateFrames[playerId] = 0;
-                }
-
-                var shouldUpdate = _playerUpdateFrames[playerId] <= 0;
-                if (shouldUpdate)
-                {
-                    _playerUpdateFrames[playerId] = updateFrequency;
-                }
-                else
-                {
-                    _playerUpdateFrames[playerId]--;
-                }
-
-                // 必要な主要ボーンのみを定義
-                var requiredBones = new[]
-                {
-                    PlayerBones.HumanHead,
-                    PlayerBones.HumanSpine3,
-                    PlayerBones.HumanPelvis,
-                    PlayerBones.HumanLForearm1,
-                    PlayerBones.HumanLPalm,
-                    PlayerBones.HumanRForearm1,
-                    PlayerBones.HumanRPalm,
-                    PlayerBones.HumanLCalf,
-                    PlayerBones.HumanLFoot,
-                    PlayerBones.HumanRCalf,
-                    PlayerBones.HumanRFoot
-                };
-
-                // ボーンの位置を画面座標に変換（最適化）
-                var bounds = this.GetAimviewBounds();
-                var bones = new Dictionary<PlayerBones, Vector2>(11);
-
-                // ボーンの位置を更新（距離に応じた頻度で）
-                if (shouldUpdate)
-                {
-                    foreach (var bone in requiredBones)
-                    {
-                        if (player.Bones.TryGetValue(bone, out var boneTransform))
-                        {
-                            boneTransform.UpdatePosition();
-                        }
-                    }
-                }
-
-                // スクリーン座標に変換
-                foreach (var bone in requiredBones)
-                {
-                    if (player.Bones.TryGetValue(bone, out var boneTransform))
-                    {
-                        var worldPos = boneTransform.Position;
-                        if (this.TryGetScreenPosition(worldPos, bounds, out Vector2 boneScreenPos))
-                        {
-                            bones[bone] = boneScreenPos;
-                        }
-                    }
-                }
-
-                // シンプルなスケルトンの描画
-                if (bones.Count > 0)
-                {
-                    // 脊椎の描画
-                    if (bones.ContainsKey(PlayerBones.HumanPelvis) && bones.ContainsKey(PlayerBones.HumanSpine3))
-                    {
-                        this.DrawBoneConnection(canvas, bones, PlayerBones.HumanPelvis, PlayerBones.HumanSpine3, paint);
-                    }
-
-                    // 頭部の描画（円で表示）
-                    if (bones.ContainsKey(PlayerBones.HumanHead))
-                    {
-                        var headPos = bones[PlayerBones.HumanHead];
-                        paint.Style = SKPaintStyle.Stroke;
-                        
-                        var headSize = CalculateDistanceBasedSize(distance);
-                        canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
-                    }
-
-                    // 左腕の描画
-                    if (bones.ContainsKey(PlayerBones.HumanSpine3))
-                    {
-                        if (bones.ContainsKey(PlayerBones.HumanLForearm1))
-                        {
-                            paint.Color = paint.Color.WithAlpha(255);
-                            this.DrawBoneConnection(canvas, bones, PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1, paint);
-                            paint.Color = paint.Color.WithAlpha(200);
-                            
-                            if (bones.ContainsKey(PlayerBones.HumanLPalm))
-                            {
-                                paint.Color = paint.Color.WithAlpha(255);
-                                this.DrawBoneConnection(canvas, bones, PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm, paint);
-                                paint.Color = paint.Color.WithAlpha(200);
-                            }
-                        }
-                    }
-
-                    // 右腕の描画
-                    if (bones.ContainsKey(PlayerBones.HumanSpine3))
-                    {
-                        if (bones.ContainsKey(PlayerBones.HumanRForearm1))
-                        {
-                            paint.Color = paint.Color.WithAlpha(255);
-                            this.DrawBoneConnection(canvas, bones, PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1, paint);
-                            paint.Color = paint.Color.WithAlpha(200);
-                            
-                            if (bones.ContainsKey(PlayerBones.HumanRPalm))
-                            {
-                                paint.Color = paint.Color.WithAlpha(255);
-                                this.DrawBoneConnection(canvas, bones, PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm, paint);
-                                paint.Color = paint.Color.WithAlpha(200);
-                            }
-                        }
-                    }
-
-                    // 左脚の描画
-                    if (bones.ContainsKey(PlayerBones.HumanPelvis) && bones.ContainsKey(PlayerBones.HumanLCalf))
-                    {
-                        this.DrawBoneConnection(canvas, bones, PlayerBones.HumanPelvis, PlayerBones.HumanLCalf, paint);
-                        
-                        if (bones.ContainsKey(PlayerBones.HumanLFoot))
-                        {
-                            this.DrawBoneConnection(canvas, bones, PlayerBones.HumanLCalf, PlayerBones.HumanLFoot, paint);
-                        }
-                    }
-
-                    // 右脚の描画
-                    if (bones.ContainsKey(PlayerBones.HumanPelvis) && bones.ContainsKey(PlayerBones.HumanRCalf))
-                    {
-                        this.DrawBoneConnection(canvas, bones, PlayerBones.HumanPelvis, PlayerBones.HumanRCalf, paint);
-                        
-                        if (bones.ContainsKey(PlayerBones.HumanRFoot))
-                        {
-                            this.DrawBoneConnection(canvas, bones, PlayerBones.HumanRCalf, PlayerBones.HumanRFoot, paint);
-                        }
-                    }
-                }
+                canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
             }
-
-            // テキスト情報の表示
-            DrawPlayerTextInfo(canvas, player, distance, screenPos, objectSettings);
         }
 
-        private void DrawBoneConnection(SKCanvas canvas, Dictionary<PlayerBones, Vector2> bones, PlayerBones bone1, PlayerBones bone2, SKPaint paint)
+        private float CalculateLineWidth(float distance)
         {
-            if (bones == null || !bones.ContainsKey(bone1) || !bones.ContainsKey(bone2))
-                return;
-
-            var start = bones[bone1];
-            var end = bones[bone2];
-            canvas.DrawLine(start.X, start.Y, end.X, end.Y, paint);
+            return Math.Max(2.0f * (1.0f - distance / 1000.0f), 0.5f);
         }
 
         private void BtnToggleMaximize_Click(object sender, EventArgs e)
@@ -1087,7 +1076,7 @@ namespace eft_dma_radar
                 this.btnToggleMaximize.Location = new Point(5, 5);
                 this.btnRefresh.Location = new Point(30, 5);
                 this.btnToggleCrosshair.Location = new Point(55, 5);
-                this.btnToggleSkeleton.Location = new Point(90, 5);
+                this.btnToggleESPstyle.Location = new Point(90, 5);
                 this.btnToggleName.Location = new Point(125, 5);
                 this.btnToggleWeapon.Location = new Point(160, 5);
                 this.btnToggleHealth.Location = new Point(195, 5);
@@ -1103,7 +1092,7 @@ namespace eft_dma_radar
                 this.btnToggleMaximize.Location = new Point(5, 5);
                 this.btnRefresh.Location = new Point(30, 5);
                 this.btnToggleCrosshair.Location = new Point(55, 5);
-                this.btnToggleSkeleton.Location = new Point(90, 5);
+                this.btnToggleESPstyle.Location = new Point(90, 5);
                 this.btnToggleName.Location = new Point(125, 5);
                 this.btnToggleWeapon.Location = new Point(160, 5);
                 this.btnToggleHealth.Location = new Point(195, 5);
@@ -1144,6 +1133,233 @@ namespace eft_dma_radar
                 CrosshairStyle.Circle => Color.Yellow,
                 _ => Color.Red
             };
+        }
+
+        private Color GetESPButtonColor()
+        {
+            switch (this.config.AimviewSettings.ESPStyle)
+            {
+                case ESPStyle.Skeleton:
+                    return Color.LimeGreen;
+                case ESPStyle.Box:
+                    return Color.Yellow;
+                case ESPStyle.Dot:
+                    return Color.Red;
+                default:
+                    return Color.Red;
+            }
+        }
+
+        private string GetESPButtonText()
+        {
+            return this.config.AimviewSettings.ESPStyle switch
+            {
+                ESPStyle.Skeleton => "SK",
+                ESPStyle.Box => "Box",
+                ESPStyle.Dot => "Dot",
+                _ => "SK"
+            };
+        }
+
+        private SKPaint GetCachedPaint(Player player)
+        {
+            var paint = _paintCache.GetOrAdd(player.ProfileID, _ => 
+            {
+                var newPaint = GetPaintFromPool("default");
+                CopyPaintProperties(player.GetAimviewPaint(), newPaint);
+                return newPaint;
+            });
+
+            return paint;
+        }
+
+        private void CopyPaintProperties(SKPaint source, SKPaint target)
+        {
+            if (source == null || target == null)
+                return;
+
+            target.Color = source.Color;
+            target.Style = source.Style;
+            target.StrokeWidth = source.StrokeWidth;
+            target.StrokeCap = source.StrokeCap;
+            target.StrokeJoin = source.StrokeJoin;
+            target.TextAlign = source.TextAlign;
+            target.TextSize = source.TextSize;
+            target.TextEncoding = source.TextEncoding;
+            target.FilterQuality = source.FilterQuality;
+            target.IsAntialias = source.IsAntialias;
+            target.IsDither = source.IsDither;
+        }
+
+        private bool ShouldUpdatePosition(string playerId, float distance)
+        {
+            var now = DateTime.Now;
+            if (!_lastUpdateTime.TryGetValue(playerId, out var lastUpdate))
+            {
+                _lastUpdateTime[playerId] = now;
+                return true;
+            }
+
+            var updateInterval = distance switch
+            {
+                <= 50 => TimeSpan.FromMilliseconds(16),  // 60fps
+                <= 100 => TimeSpan.FromMilliseconds(33), // 30fps
+                <= 200 => TimeSpan.FromMilliseconds(66), // 15fps
+                _ => TimeSpan.FromMilliseconds(100)      // 10fps
+            };
+
+            if (now - lastUpdate >= updateInterval)
+            {
+                _lastUpdateTime[playerId] = now;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void CleanupCaches()
+        {
+            var now = DateTime.Now;
+            if (now - _lastCleanupTime < TimeSpan.FromMilliseconds(CLEANUP_INTERVAL_MS))
+                return;
+
+            _lastCleanupTime = now;
+            var expiredTime = TimeSpan.FromSeconds(5);
+
+            // 期限切れのアイテムを一括で特定
+            var expiredItems = _lastUpdateTime
+                .Where(x => now - x.Value > expiredTime)
+                .Select(x => x.Key)
+                .ToList();
+
+            foreach (var key in expiredItems)
+            {
+                if (_paintCache.TryRemove(key, out var paint))
+                {
+                    ReturnPaintToPool("default", paint);
+                }
+                _lastUpdateTime.TryRemove(key, out _);
+                _lastPositions.TryRemove(key, out _);
+            }
+
+            // メモリ使用量の監視
+            MonitorMemoryUsage();
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            
+            // すべてのキャッシュをクリア
+            foreach (var paint in _paintCache.Values)
+            {
+                paint.Dispose();
+            }
+            _paintCache.Clear();
+            _lastUpdateTime.Clear();
+            _lastPositions.Clear();
+
+            // プールされたオブジェクトをクリア
+            foreach (var queue in _paintPool.Values)
+            {
+                while (queue.Count > 0)
+                {
+                    queue.Dequeue().Dispose();
+                }
+            }
+            foreach (var queue in _pathPool.Values)
+            {
+                while (queue.Count > 0)
+                {
+                    queue.Dequeue().Dispose();
+                }
+            }
+            _paintPool.Clear();
+            _pathPool.Clear();
+        }
+
+        // オブジェクトプーリング用のメソッド
+        private SKPaint GetPaintFromPool(string key)
+        {
+            if (!_paintPool.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<SKPaint>();
+                _paintPool[key] = queue;
+            }
+
+            if (queue.Count > 0)
+                return queue.Dequeue();
+
+            return new SKPaint();
+        }
+
+        private void ReturnPaintToPool(string key, SKPaint paint)
+        {
+            if (!_paintPool.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<SKPaint>();
+                _paintPool[key] = queue;
+            }
+
+            if (queue.Count < POOL_SIZE)
+            {
+                paint.Reset();
+                queue.Enqueue(paint);
+            }
+            else
+            {
+                paint.Dispose();
+            }
+        }
+
+        private SKPath GetPathFromPool(string key)
+        {
+            if (!_pathPool.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<SKPath>();
+                _pathPool[key] = queue;
+            }
+
+            if (queue.Count > 0)
+                return queue.Dequeue();
+
+            return new SKPath();
+        }
+
+        private void ReturnPathToPool(string key, SKPath path)
+        {
+            if (!_pathPool.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<SKPath>();
+                _pathPool[key] = queue;
+            }
+
+            if (queue.Count < POOL_SIZE)
+            {
+                path.Reset();
+                queue.Enqueue(path);
+            }
+            else
+            {
+                path.Dispose();
+            }
+        }
+
+        // メモリ使用量の監視と制御
+        private void MonitorMemoryUsage()
+        {
+            if (_paintCache.Count > MAX_CACHED_OBJECTS)
+            {
+                var itemsToRemove = _paintCache.Count - MAX_CACHED_OBJECTS;
+                var oldestItems = _lastUpdateTime.OrderBy(x => x.Value).Take(itemsToRemove);
+                
+                foreach (var item in oldestItems)
+                {
+                    _paintCache.TryRemove(item.Key, out var paint);
+                    _lastUpdateTime.TryRemove(item.Key, out _);
+                    _lastPositions.TryRemove(item.Key, out _);
+                }
+            }
         }
     }
 } 
