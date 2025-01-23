@@ -76,6 +76,59 @@ namespace eft_dma_radar
 
             return true;
         }
+
+        /// <summary>
+        /// Converts multiple 3D positions into 2D screen positions in a batch operation for better performance
+        /// </summary>
+        /// <param name="positions">List of 3D positions to convert</param>
+        /// <param name="width">Screen width</param>
+        /// <param name="height">Screen height</param>
+        /// <param name="screenPositions">Output list of 2D screen positions</param>
+        /// <returns>List of booleans indicating if each position is visible</returns>
+        public static List<bool> WorldToScreenCombined(List<Vector3> positions, float width, float height, List<Vector2> screenPositions)
+        {
+            var results = new List<bool>();
+            screenPositions.Clear();
+
+            if (positions.Count == 0 || Memory.CameraManager?.ViewMatrix == null)
+            {
+                return results;
+            }
+
+            // Get view matrix once for all calculations
+            var viewMatrix = Matrix4x4.Transpose(Memory.CameraManager.ViewMatrix);
+
+            // Pre-calculate common vectors
+            var translationVector = new Vector3(viewMatrix.M41, viewMatrix.M42, viewMatrix.M43);
+            var up = new Vector3(viewMatrix.M21, viewMatrix.M22, viewMatrix.M23);
+            var right = new Vector3(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13);
+
+            // Process all positions in batch
+            foreach (var position in positions)
+            {
+                var w = Vector3.Dot(translationVector, position) + viewMatrix.M44;
+
+                if (w < 0.098f)
+                {
+                    results.Add(false);
+                    screenPositions.Add(Vector2.Zero);
+                    continue;
+                }
+
+                var y = Vector3.Dot(up, position) + viewMatrix.M24;
+                var x = Vector3.Dot(right, position) + viewMatrix.M14;
+
+                var screenPos = new Vector2(
+                    (width / 2f) * (1f + x / w),
+                    (height / 2f) * (1f - y / w)
+                );
+
+                results.Add(true);
+                screenPositions.Add(screenPos);
+            }
+
+            return results;
+        }
         #endregion
 
         #region GUI Extensions
