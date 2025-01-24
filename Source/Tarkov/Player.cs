@@ -577,7 +577,7 @@ namespace eft_dma_radar
             this.Info = info;
             this.PlayerRole = role;
             this.HealthController = healthController;
-            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, 1, groupID);
+            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, "1", groupID);
 
             if (scatterReadMap.Results[0][9].TryGetResult<int>(out var registrationDate))
             {
@@ -657,7 +657,7 @@ namespace eft_dma_radar
             if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var groupID))
                 return;
 
-            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, name, groupID, playerSide);
+            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, "1", groupID, playerSide);
 
             this.IsLocalPlayer = false;
             this.HealthController = healthController;
