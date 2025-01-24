@@ -210,6 +210,8 @@ namespace eft_dma_radar
         public CrosshairStyle CrosshairStyle { get; set; } = CrosshairStyle.Cross;  // デフォルトは十字線
         public float CircleRadius { get; set; } = 20.0f;  // サークルの半径（デフォルト値: 20.0）
         public ESPStyle ESPStyle { get; set; } = ESPStyle.Dot;  // デフォルトはドット
+        public bool usePerformanceSkeleton { get; set; } = true;
+        public float performanceSkeletonDistance { get; set; } = 100f;
         public bool showWeaponInfo { get; set; } = true;
         public bool showHealthInfo { get; set; } = true;
         public bool useTransparentBackground { get; set; } = false;
@@ -226,6 +228,8 @@ namespace eft_dma_radar
             this.CrosshairStyle = CrosshairStyle.Cross;
             this.CircleRadius = 20.0f;
             this.ESPStyle = ESPStyle.Dot;
+            this.usePerformanceSkeleton = true;
+            this.performanceSkeletonDistance = 100f;
             this.showWeaponInfo = true;
             this.showHealthInfo = true;
             this.useTransparentBackground = false;

@@ -65,7 +65,7 @@ namespace eft_dma_radar
             this.Text = "AimView";
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.TopMost = true;
-            
+                  
             // 背景色の設定
             UpdateBackgroundColor();
 
@@ -978,19 +978,27 @@ namespace eft_dma_radar
             var boneMapping = new Dictionary<int, PlayerBones>();
             int index = 0;
 
-            // Collect all bone positions and update them
-            foreach (var bone in player.Bones)
+            // 距離に応じて処理するボーンを選択（パフォーマンスモードが有効な場合）
+            var bonesToProcess = this.config.AimviewSettings.usePerformanceSkeleton ? 
+                GetDistanceBasedBones(distance) : 
+                player.Bones.Keys.ToArray();
+
+            // 選択されたボーンの位置を収集
+            foreach (var boneType in bonesToProcess)
             {
-                bone.Value.UpdatePosition();  // 重要: ボーンの位置を更新
-                bonePositions.Add(bone.Value.Position);
-                boneMapping[index] = bone.Key;
-                index++;
+                if (player.Bones.TryGetValue(boneType, out var bone))
+                {
+                    bone.UpdatePosition();
+                    bonePositions.Add(bone.Position);
+                    boneMapping[index] = boneType;
+                    index++;
+                }
             }
 
-            // Batch convert all positions
+            // 一括でスクリーン座標に変換
             var visibilityResults = Extensions.WorldToScreenCombined(bonePositions, bounds.Width, bounds.Height, screenPositions);
 
-            // Create a mapping of visible bones
+            // 可視ボーンのマッピングを作成
             var visibleBones = new Dictionary<PlayerBones, Vector2>();
             for (int i = 0; i < bonePositions.Count; i++)
             {
@@ -1007,39 +1015,85 @@ namespace eft_dma_radar
                 }
             }
 
-            // Draw connections only for visible bones
+            // ボーンの接続を描画
             var paint = player.GetAimviewPaint();
-            paint.Style = SKPaintStyle.Stroke;  // 重要: ストロークスタイルを設定
-            paint.StrokeWidth = 2.0f;  // 線の太さを設定
+            paint.Style = SKPaintStyle.Stroke;
+            paint.StrokeWidth = 2.0f;
 
-            if (visibleBones.Count >= 2)  // Only draw if we have at least 2 visible bones
+            if (visibleBones.Count >= 2)
             {
-                // Draw main body connections
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanHead, PlayerBones.HumanSpine3, paint);
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanPelvis, paint);
-
-                // Draw arms
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1, paint);
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm, paint);
-
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1, paint);
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm, paint);
-
-                // Draw legs
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanLCalf, paint);
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLCalf, PlayerBones.HumanLFoot, paint);
-
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanRCalf, paint);
-                DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRCalf, PlayerBones.HumanRFoot, paint);
-
-                // Draw head indicator with distance-based size
-                if (visibleBones.TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
+                if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
                 {
-                    paint.Style = SKPaintStyle.Stroke;
-                    float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
-                    canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
+                    // パフォーマンスモード無効時または閾値以下：フルスケルトン
+                    DrawFullSkeleton(canvas, visibleBones, paint);
+                    
+                    // 頭部インジケーターを表示
+                    if (visibleBones.TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
+                    {
+                        paint.Style = SKPaintStyle.Stroke;
+                        float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
+                        canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
+                    }
                 }
             }
+
+            // パフォーマンスモード有効時の遠距離：骨盤位置にドットを表示
+            if (this.config.AimviewSettings.usePerformanceSkeleton && distance > this.config.AimviewSettings.performanceSkeletonDistance && 
+                visibleBones.TryGetValue(PlayerBones.HumanPelvis, out Vector2 pelvisPos))
+            {
+                paint.Style = SKPaintStyle.Fill;
+                float dotSize = CalculateDistanceBasedSize(distance, 6.0f, 2.0f, 0.02f);
+                canvas.DrawCircle(pelvisPos.X, pelvisPos.Y, dotSize, paint);
+            }
+        }
+
+        private PlayerBones[] GetDistanceBasedBones(float distance)
+        {
+            if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
+            {
+                // パフォーマンスモード無効時または閾値以下：フルスケルトン
+                return new[]
+                {
+                    PlayerBones.HumanHead,
+                    PlayerBones.HumanSpine3,
+                    PlayerBones.HumanPelvis,
+                    PlayerBones.HumanLForearm1,
+                    PlayerBones.HumanLPalm,
+                    PlayerBones.HumanRForearm1,
+                    PlayerBones.HumanRPalm,
+                    PlayerBones.HumanLCalf,
+                    PlayerBones.HumanLFoot,
+                    PlayerBones.HumanRCalf,
+                    PlayerBones.HumanRFoot
+                };
+            }
+            else
+            {
+                // 遠距離：骨盤位置のみ
+                return new[]
+                {
+                    PlayerBones.HumanPelvis
+                };
+            }
+        }
+
+        private void DrawFullSkeleton(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, SKPaint paint)
+        {
+            // メインボディ
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanHead, PlayerBones.HumanSpine3, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanPelvis, paint);
+
+            // 腕
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm, paint);
+
+            // 脚
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanLCalf, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLCalf, PlayerBones.HumanLFoot, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanRCalf, paint);
+            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRCalf, PlayerBones.HumanRFoot, paint);
         }
 
         private void DrawBoneConnectionIfVisible(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, 
@@ -1206,13 +1260,8 @@ namespace eft_dma_radar
                 return true;
             }
 
-            var updateInterval = distance switch
-            {
-                <= 30 => TimeSpan.FromMilliseconds(16),  // 60fps
-                <= 60 => TimeSpan.FromMilliseconds(33), // 30fps
-                <= 100 => TimeSpan.FromMilliseconds(66), // 15fps
-                _ => TimeSpan.FromMilliseconds(100)      // 10fps
-            };
+            // 距離に関係なく33ms（約30fps）に固定
+            var updateInterval = TimeSpan.FromMilliseconds(33);
 
             if (now - lastUpdate >= updateInterval)
             {
