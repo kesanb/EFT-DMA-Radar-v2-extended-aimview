@@ -531,7 +531,7 @@ namespace eft_dma_radar
             var healthController = round1.AddEntry<ulong>(0, 5, this.Base, null, Offsets.Player.HealthController);
 
             var transIntPtr2 = round2.AddEntry<ulong>(0, 6, transIntPtr1, null, Offsets.Player.To_TransformInternal[1]);
-            var name = round2.AddEntry<ulong>(0, 7, info, null, Offsets.PlayerInfo.Nickname);
+            // var name = round2.AddEntry<ulong>(0, 7, info, null, Offsets.PlayerInfo.Nickname);
             var inventory = round2.AddEntry<ulong>(0, 8, inventoryController, null, Offsets.InventoryController.Inventory);
             var registrationDate = round2.AddEntry<int>(0, 9, info, null, Offsets.PlayerInfo.RegistrationDate);
             var groupID = round2.AddEntry<ulong>(0, 10, info, null, Offsets.PlayerInfo.GroupId);
@@ -563,8 +563,8 @@ namespace eft_dma_radar
                 return;
             if (!scatterReadMap.Results[0][3].TryGetResult<ulong>(out var playerBody))
                 return;
-            if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var name))
-                return;
+            //if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var name))
+                //return;
             if (!scatterReadMap.Results[0][16].TryGetResult<ulong>(out var inventorySlots))
                 return;
             if (!scatterReadMap.Results[0][18].TryGetResult<ulong>(out var transformInternal))
@@ -577,7 +577,7 @@ namespace eft_dma_radar
             this.Info = info;
             this.PlayerRole = role;
             this.HealthController = healthController;
-            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, name, groupID);
+            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, 1, groupID);
 
             if (scatterReadMap.Results[0][9].TryGetResult<int>(out var registrationDate))
             {
@@ -605,7 +605,7 @@ namespace eft_dma_radar
             var transIntPtr1 = round1.AddEntry<ulong>(0, 1, this.Info, null, Offsets.ObservedPlayerView.To_TransformInternal[0]);
             var inventoryControllerPtr1 = round1.AddEntry<ulong>(0, 2, this.Info, null, Offsets.ObservedPlayerView.To_InventoryController[0]);
             var healthControllerPtr1 = round1.AddEntry<ulong>(0, 3, this.Info, null, Offsets.ObservedPlayerView.To_HealthController[0]);
-            var name = round1.AddEntry<ulong>(0, 4, this.Info, null, Offsets.ObservedPlayerView.NickName);
+            //var name = round1.AddEntry<ulong>(0, 4, this.Info, null, Offsets.ObservedPlayerView.NickName);
             var accountID = round1.AddEntry<ulong>(0, 5, this.Info, null, Offsets.ObservedPlayerView.AccountID);
             var playerSide = round1.AddEntry<int>(0, 6, this.Info, null, Offsets.ObservedPlayerView.PlayerSide);
             var groupID = round1.AddEntry<ulong>(0, 7, this.Info, null, Offsets.ObservedPlayerView.GroupID);
@@ -650,8 +650,8 @@ namespace eft_dma_radar
                 return;
             if (!scatterReadMap.Results[0][5].TryGetResult<ulong>(out var accountID))
                 return;
-            if (!scatterReadMap.Results[0][4].TryGetResult<ulong>(out var name))
-                return;
+            //if (!scatterReadMap.Results[0][4].TryGetResult<ulong>(out var name))
+                //return;
             if (!scatterReadMap.Results[0][9].TryGetResult<int>(out var memberCategory))
                 return;
             if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var groupID))
@@ -669,15 +669,16 @@ namespace eft_dma_radar
             this.FinishAlloc();
         }
 
-        private void InitializePlayerProperties(ulong movementContext, ulong inventoryController, ulong inventorySlots, ulong transformInternal, ulong playerBody, ulong name, ulong groupID, int playerSide = 0)
+        private void InitializePlayerProperties(ulong movementContext, ulong inventoryController, ulong inventorySlots, ulong transformInternal, ulong playerBody, string name, ulong groupID, int playerSide = 0)
         {
             this.MovementContext = movementContext;
             this.InventoryController = inventoryController;
             this.InventorySlots = inventorySlots;
             this._gearManager = new GearManager(this.InventorySlots);
             this.PlayerBody = playerBody;
-            this.Name = Memory.ReadUnityString(name);
-            this.Name = Helpers.TransliterateCyrillic(this.Name);
+            this.Name = "Name";
+            //this.Name = Memory.ReadUnityString(name);
+            //this.Name = Helpers.TransliterateCyrillic(this.Name);
             this.PlayerSide = playerSide;
 
             if (groupID != 0)
