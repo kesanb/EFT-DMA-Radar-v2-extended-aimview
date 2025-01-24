@@ -199,44 +199,6 @@ namespace eft_dma_radar
         Dot            // ドット表示
     }
 
-    public class AimviewSettings
-    {
-        public bool Enabled { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public int X { get; set; }
-        public int Y { get; set; }
-        public string TeammateID { get; set; }
-        public CrosshairStyle CrosshairStyle { get; set; } = CrosshairStyle.Cross;  // デフォルトは十字線
-        public float CircleRadius { get; set; } = 20.0f;  // サークルの半径（デフォルト値: 20.0）
-        public ESPStyle ESPStyle { get; set; } = ESPStyle.Dot;  // デフォルトはドット
-        public bool usePerformanceSkeleton { get; set; } = true;
-        public float performanceSkeletonDistance { get; set; } = 100f;
-        public bool showWeaponInfo { get; set; } = true;
-        public bool showHealthInfo { get; set; } = true;
-        public bool useTransparentBackground { get; set; } = false;
-        public Dictionary<string, AimviewObjectSettings> ObjectSettings { get; set; }
-
-        public AimviewSettings(bool enabled, int width, int height, int x, int y, string teammateID, Dictionary<string, AimviewObjectSettings> objectSettings)
-        {
-            this.Enabled = enabled;
-            this.Width = width;
-            this.Height = height;
-            this.X = x;
-            this.Y = y;
-            this.TeammateID = teammateID;
-            this.CrosshairStyle = CrosshairStyle.Cross;
-            this.CircleRadius = 20.0f;
-            this.ESPStyle = ESPStyle.Dot;
-            this.usePerformanceSkeleton = true;
-            this.performanceSkeletonDistance = 100f;
-            this.showWeaponInfo = true;
-            this.showHealthInfo = true;
-            this.useTransparentBackground = false;
-            this.ObjectSettings = objectSettings ?? Config.DefaultAimviewObjectSettings;
-        }
-    }
-
     public class AimviewObjectSettings
     {
         public bool Enabled { get; set; }

@@ -7,6 +7,26 @@ using System.Linq;
 
 namespace eft_dma_radar
 {
+    // プレイヤータイプごとの設定クラス
+    public class PlayerTypeSettings
+    {
+        public bool ShowName { get; set; } = true;
+        public bool ShowDistance { get; set; } = true;
+        public bool ShowWeapon { get; set; } = true;
+        public bool ShowHealth { get; set; } = true;
+        public ESPStyle ESPStyle { get; set; } = ESPStyle.Skeleton;
+    }
+
+    // プレイヤータイプごとのUIコントロール
+    public class PlayerTypeControls
+    {
+        public Button ESPStyleButton { get; set; }
+        public Button NameButton { get; set; }
+        public Button WeaponButton { get; set; }
+        public Button HealthButton { get; set; }
+        public Button DistanceButton { get; set; }
+    }
+
     public partial class AimViewForm : Form
     {
         private readonly SKGLControl aimViewCanvas;
@@ -57,6 +77,11 @@ namespace eft_dma_radar
         private const int POOL_SIZE = 100;
         private const int MAX_CACHED_OBJECTS = 1000;
 
+        // プレイヤータイプごとのUIコントロールを管理
+        private readonly Dictionary<PlayerType, PlayerTypeControls> _playerTypeControls = new();
+        private ComboBox _playerTypeSelector;
+        private PlayerType _currentPlayerType = PlayerType.PMC;
+
         public AimViewForm(Config config)
         {
             this.config = config;
@@ -98,7 +123,7 @@ namespace eft_dma_radar
             this.btnRefresh.Font = new Font("Segoe UI", 10f);
             this.btnRefresh.Click += BtnRefresh_Click;
 
-            // クロスヘア切り替えボタンの設定を修正
+            // クロスヘア切り替えボタンの設定
             this.btnToggleCrosshair = new Button
             {
                 Text = "CH",
@@ -112,108 +137,8 @@ namespace eft_dma_radar
             this.btnToggleCrosshair.FlatAppearance.BorderSize = 0;
             this.btnToggleCrosshair.Click += (s, e) =>
             {
-                // クロスヘアスタイルを切り替え
                 this.config.AimviewSettings.CrosshairStyle = (CrosshairStyle)(((int)this.config.AimviewSettings.CrosshairStyle + 1) % 3);
                 this.btnToggleCrosshair.ForeColor = this.GetCrosshairButtonColor();
-                this.aimViewCanvas.Invalidate();
-            };
-
-            // スケルトン切り替えボタンの設定
-            this.btnToggleESPstyle = new Button
-            {
-                Text = GetESPButtonText(),
-                Size = new Size(30, 20),
-                Location = new Point(90, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = GetESPButtonColor(),
-                Cursor = Cursors.Hand
-            };
-            this.btnToggleESPstyle.FlatAppearance.BorderSize = 0;
-            this.btnToggleESPstyle.Click += (s, e) =>
-            {
-                // ESPスタイルを切り替え
-                this.config.AimviewSettings.ESPStyle = (ESPStyle)(((int)this.config.AimviewSettings.ESPStyle + 1) % 3);
-                this.btnToggleESPstyle.Text = GetESPButtonText();
-                this.btnToggleESPstyle.ForeColor = GetESPButtonColor();
-                this.aimViewCanvas.Invalidate();
-            };
-
-            // 名前表示切り替えボタン
-            this.btnToggleName = new Button
-            {
-                Text = "Na",
-                Size = new Size(30, 20),
-                Location = new Point(125, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.config.AimviewSettings.ObjectSettings["Player"].Name ? Color.LimeGreen : Color.Red,
-                Cursor = Cursors.Hand
-            };
-            this.btnToggleName.FlatAppearance.BorderSize = 0;
-            this.btnToggleName.Click += (s, e) =>
-            {
-                var playerSettings = this.config.AimviewSettings.ObjectSettings["Player"];
-                playerSettings.Name = !playerSettings.Name;
-                this.btnToggleName.ForeColor = playerSettings.Name ? Color.LimeGreen : Color.Red;
-                this.aimViewCanvas.Invalidate();
-            };
-
-            // 武器情報の表示切り替えボタン
-            this.btnToggleWeapon = new Button
-            {
-                Text = "We",
-                Size = new Size(30, 20),
-                Location = new Point(160, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.config.AimviewSettings.showWeaponInfo ? Color.LimeGreen : Color.Red,
-                Cursor = Cursors.Hand
-            };
-            this.btnToggleWeapon.FlatAppearance.BorderSize = 0;
-            this.btnToggleWeapon.Click += (s, e) =>
-            {
-                this.config.AimviewSettings.showWeaponInfo = !this.config.AimviewSettings.showWeaponInfo;
-                this.btnToggleWeapon.ForeColor = this.config.AimviewSettings.showWeaponInfo ? Color.LimeGreen : Color.Red;
-                this.aimViewCanvas.Invalidate();
-            };
-
-            // ヘルス情報の表示切り替えボタン
-            this.btnToggleHealth = new Button
-            {
-                Text = "HP",
-                Size = new Size(30, 20),
-                Location = new Point(195, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.config.AimviewSettings.showHealthInfo ? Color.LimeGreen : Color.Red,
-                Cursor = Cursors.Hand
-            };
-            this.btnToggleHealth.FlatAppearance.BorderSize = 0;
-            this.btnToggleHealth.Click += (s, e) =>
-            {
-                this.config.AimviewSettings.showHealthInfo = !this.config.AimviewSettings.showHealthInfo;
-                this.btnToggleHealth.ForeColor = this.config.AimviewSettings.showHealthInfo ? Color.LimeGreen : Color.Red;
-                this.aimViewCanvas.Invalidate();
-            };
-
-            // 距離表示切り替えボタン
-            this.btnToggleDistance = new Button
-            {
-                Text = "Dis",
-                Size = new Size(30, 20),
-                Location = new Point(230, 5),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(40, 40, 40),
-                ForeColor = this.config.AimviewSettings.ObjectSettings["Player"].Distance ? Color.LimeGreen : Color.Red,
-                Cursor = Cursors.Hand
-            };
-            this.btnToggleDistance.FlatAppearance.BorderSize = 0;
-            this.btnToggleDistance.Click += (s, e) =>
-            {
-                var playerSettings = this.config.AimviewSettings.ObjectSettings["Player"];
-                playerSettings.Distance = !playerSettings.Distance;
-                this.btnToggleDistance.ForeColor = playerSettings.Distance ? Color.LimeGreen : Color.Red;
                 this.aimViewCanvas.Invalidate();
             };
 
@@ -226,21 +151,18 @@ namespace eft_dma_radar
             // コントロールの追加
             this.Controls.Add(this.aimViewCanvas);
             this.Controls.Add(this.btnToggleCrosshair);
-            this.Controls.Add(this.btnToggleESPstyle);
-            this.Controls.Add(this.btnToggleName);
-            this.Controls.Add(this.btnToggleWeapon);
-            this.Controls.Add(this.btnToggleHealth);
-            this.Controls.Add(this.btnToggleDistance);
             this.Controls.Add(this.btnToggleMaximize);
             this.Controls.Add(this.btnRefresh);
+
+            // プレイヤータイプごとのコントロールを初期化
+            InitializePlayerTypeControls();
+
+            // コントロールの表示順序を調整
+            this.aimViewCanvas.SendToBack();
             this.btnToggleMaximize.BringToFront();
             this.btnRefresh.BringToFront();
-            this.btnToggleDistance.BringToFront();
-            this.btnToggleHealth.BringToFront();
-            this.btnToggleWeapon.BringToFront();
-            this.btnToggleName.BringToFront();
-            this.btnToggleESPstyle.BringToFront();
             this.btnToggleCrosshair.BringToFront();
+            this._playerTypeSelector.BringToFront();
             
             // イベントハンドラの設定
             this.aimViewCanvas.PaintSurface += this.AimViewCanvas_PaintSurface;
@@ -807,6 +729,9 @@ namespace eft_dma_radar
             if (distance >= Math.Max(objectSettings.PaintDistance, objectSettings.TextDistance))
                 return;
 
+            // プレイヤータイプごとの設定を取得
+            var typeSettings = GetPlayerTypeSettings(player.Type);
+
             // キャッシュされたペイントを使用
             var paint = GetCachedPaint(player);
             Vector2 textPosition = screenPos;
@@ -818,7 +743,7 @@ namespace eft_dma_radar
 
             if (isWithinPaintDistance)
             {
-                switch (this.config.AimviewSettings.ESPStyle)
+                switch (typeSettings.ESPStyle)
                 {
                     case ESPStyle.Skeleton:
                         DrawPlayerSkeleton(canvas, player, this.GetAimviewBounds(), distance);
@@ -834,21 +759,25 @@ namespace eft_dma_radar
                 }
             }
 
-            if (isWithinTextDistance && (objectSettings.Distance || objectSettings.Name || 
-                this.config.AimviewSettings.showWeaponInfo || 
-                this.config.AimviewSettings.showHealthInfo))
+            if (isWithinTextDistance)
             {
-                DrawPlayerTextInfo(canvas, player, distance, textPosition, objectSettings);
+                DrawPlayerTextInfo(canvas, player, distance, textPosition, objectSettings, typeSettings);
             }
 
             // 定期的なキャッシュのクリーンアップ
             CleanupCaches();
         }
 
-        private void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings)
+        private void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings, PlayerTypeSettings typeSettings)
         {
             if (distance >= objectSettings.TextDistance)
                 return;
+
+            // プレイヤータイプの設定を取得（BEARとUSECの場合はPMCの設定を使用）
+            if (player.Type == PlayerType.BEAR || player.Type == PlayerType.USEC)
+            {
+                typeSettings = GetPlayerTypeSettings(PlayerType.PMC);
+            }
 
             var textPaint = player.GetAimviewTextPaint();
             textPaint.TextSize = this.CalculateFontSize(distance);
@@ -857,7 +786,7 @@ namespace eft_dma_radar
             var currentY = screenPos.Y + 20;
 
             // 名前の描画
-            if (objectSettings.Name && !string.IsNullOrEmpty(player.Name))
+            if (typeSettings.ShowName && objectSettings.Name && !string.IsNullOrEmpty(player.Name))
             {
                 // プレイヤー名を描画
                 canvas.DrawText(player.Name, textX, currentY, textPaint);
@@ -876,7 +805,7 @@ namespace eft_dma_radar
             }
 
             // 武器情報の描画
-            if (this.config.AimviewSettings.showWeaponInfo && 
+            if (typeSettings.ShowWeapon && 
                 player.ItemInHands.Item is not null && 
                 !string.IsNullOrEmpty(player.ItemInHands.Item.Short))
             {
@@ -892,14 +821,14 @@ namespace eft_dma_radar
             }
 
             // ヘルス情報の描画
-            if (this.config.AimviewSettings.showHealthInfo && !string.IsNullOrEmpty(player.HealthStatus))
+            if (typeSettings.ShowHealth && !string.IsNullOrEmpty(player.HealthStatus))
             {
                 canvas.DrawText(player.HealthStatus, textX, currentY, textPaint);
                 currentY += textPaint.TextSize * this.uiScale;
             }
 
             // 距離情報の描画
-            if (objectSettings.Distance)
+            if (typeSettings.ShowDistance && objectSettings.Distance)
             {
                 canvas.DrawText($"{distance:F0}m", textX, currentY, textPaint);
             }
@@ -1132,15 +1061,10 @@ namespace eft_dma_radar
                 this.FormBorderStyle = FormBorderStyle.None;
                 this.TopMost = true;
                 
-                // ボタンの位置を調整（新しい配置順序）
+                // ボタンの位置を調整
                 this.btnToggleMaximize.Location = new Point(5, 5);
                 this.btnRefresh.Location = new Point(30, 5);
                 this.btnToggleCrosshair.Location = new Point(55, 5);
-                this.btnToggleESPstyle.Location = new Point(90, 5);
-                this.btnToggleName.Location = new Point(125, 5);
-                this.btnToggleWeapon.Location = new Point(160, 5);
-                this.btnToggleHealth.Location = new Point(195, 5);
-                this.btnToggleDistance.Location = new Point(230, 5);
             }
             // 最大化解除時に元のスタイルに戻す
             else if (this.WindowState != FormWindowState.Maximized && this.FormBorderStyle == FormBorderStyle.None)
@@ -1148,15 +1072,10 @@ namespace eft_dma_radar
                 this.FormBorderStyle = this.previousBorderStyle;
                 this.TopMost = this.wasTopMost;
                 
-                // ボタンの位置を元に戻す（新しい配置順序）
+                // ボタンの位置を元に戻す
                 this.btnToggleMaximize.Location = new Point(5, 5);
                 this.btnRefresh.Location = new Point(30, 5);
                 this.btnToggleCrosshair.Location = new Point(55, 5);
-                this.btnToggleESPstyle.Location = new Point(90, 5);
-                this.btnToggleName.Location = new Point(125, 5);
-                this.btnToggleWeapon.Location = new Point(160, 5);
-                this.btnToggleHealth.Location = new Point(195, 5);
-                this.btnToggleDistance.Location = new Point(230, 5);
             }
             
             // 最大化ボタンのテキストを更新
@@ -1192,32 +1111,6 @@ namespace eft_dma_radar
                 CrosshairStyle.Cross => Color.LimeGreen,
                 CrosshairStyle.Circle => Color.Yellow,
                 _ => Color.Red
-            };
-        }
-
-        private Color GetESPButtonColor()
-        {
-            switch (this.config.AimviewSettings.ESPStyle)
-            {
-                case ESPStyle.Skeleton:
-                    return Color.LimeGreen;
-                case ESPStyle.Box:
-                    return Color.Yellow;
-                case ESPStyle.Dot:
-                    return Color.Red;
-                default:
-                    return Color.Red;
-            }
-        }
-
-        private string GetESPButtonText()
-        {
-            return this.config.AimviewSettings.ESPStyle switch
-            {
-                ESPStyle.Skeleton => "SK",
-                ESPStyle.Box => "Box",
-                ESPStyle.Dot => "Dot",
-                _ => "SK"
             };
         }
 
@@ -1415,6 +1308,260 @@ namespace eft_dma_radar
                     _lastPositions.TryRemove(item.Key, out _);
                 }
             }
+        }
+
+        private void InitializePlayerTypeControls()
+        {
+            // プレイヤータイプセレクターの初期化
+            _playerTypeSelector = new ComboBox
+            {
+                Location = new Point(90, 5),
+                Size = new Size(120, 20),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f)
+            };
+
+            // プレイヤータイプの追加
+            _playerTypeSelector.Items.AddRange(new object[]
+            {
+                PlayerType.PMC,
+                PlayerType.Scav,
+                PlayerType.PlayerScav,
+                PlayerType.Boss,
+                PlayerType.BossFollower,
+                PlayerType.Raider,
+                PlayerType.Rogue,
+                PlayerType.Cultist
+            });
+
+            this.Controls.Add(_playerTypeSelector);
+            _playerTypeSelector.SelectedIndexChanged += PlayerTypeSelector_SelectedIndexChanged;
+
+            // 最初のプレイヤータイプのコントロールを作成
+            _currentPlayerType = PlayerType.PMC;
+            InitializeControlsForPlayerType(_currentPlayerType);
+            _playerTypeSelector.SelectedItem = _currentPlayerType;
+
+            // 初期プレイヤータイプのコントロールを表示
+            UpdateControlsVisibility(_currentPlayerType);
+        }
+
+        private void InitializeControlsForPlayerType(PlayerType type)
+        {
+            var settings = GetPlayerTypeSettings(type);
+            var controls = new PlayerTypeControls
+            {
+                ESPStyleButton = CreateButton("SK", new Point(215, 5), GetESPButtonColor(settings.ESPStyle), (s, e) => ToggleESPStyle(type)),
+                NameButton = CreateButton("Na", new Point(250, 5), settings.ShowName ? Color.LimeGreen : Color.Red, (s, e) => ToggleName(type)),
+                WeaponButton = CreateButton("We", new Point(285, 5), settings.ShowWeapon ? Color.LimeGreen : Color.Red, (s, e) => ToggleWeapon(type)),
+                HealthButton = CreateButton("HP", new Point(320, 5), settings.ShowHealth ? Color.LimeGreen : Color.Red, (s, e) => ToggleHealth(type)),
+                DistanceButton = CreateButton("Dis", new Point(355, 5), settings.ShowDistance ? Color.LimeGreen : Color.Red, (s, e) => ToggleDistance(type))
+            };
+
+            // ESPスタイルのテキストを設定
+            controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
+
+            _playerTypeControls[type] = controls;
+
+            // コントロールをフォームに追加
+            this.Controls.Add(controls.ESPStyleButton);
+            this.Controls.Add(controls.NameButton);
+            this.Controls.Add(controls.WeaponButton);
+            this.Controls.Add(controls.HealthButton);
+            this.Controls.Add(controls.DistanceButton);
+
+            // 初期状態では非表示
+            controls.ESPStyleButton.Visible = false;
+            controls.NameButton.Visible = false;
+            controls.WeaponButton.Visible = false;
+            controls.HealthButton.Visible = false;
+            controls.DistanceButton.Visible = false;
+        }
+
+        private Button CreateButton(string text, Point location, Color foreColor, EventHandler clickHandler)
+        {
+            var button = new Button
+            {
+                Text = text,
+                Size = new Size(30, 20),
+                Location = location,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = foreColor,
+                Cursor = Cursors.Hand
+            };
+            button.FlatAppearance.BorderSize = 0;
+            button.Click += clickHandler;
+            return button;
+        }
+
+        private void PlayerTypeSelector_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_playerTypeSelector.SelectedItem == null)
+                return;
+
+            var newType = (PlayerType)_playerTypeSelector.SelectedItem;
+            _currentPlayerType = newType;
+
+            // 選択されたタイプのコントロールが存在しない場合は作成
+            if (!_playerTypeControls.ContainsKey(newType))
+            {
+                InitializeControlsForPlayerType(newType);
+            }
+
+            // 選択されたタイプのコントロールを表示
+            UpdateControlsVisibility(newType);
+
+            // 選択されたプレイヤータイプの設定を反映
+            var controls = _playerTypeControls[newType];
+            var settings = GetPlayerTypeSettings(newType);
+            
+            // ボタンの状態を更新
+            controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
+            controls.ESPStyleButton.ForeColor = GetESPButtonColor(settings.ESPStyle);
+            controls.NameButton.ForeColor = settings.ShowName ? Color.LimeGreen : Color.Red;
+            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.LimeGreen : Color.Red;
+            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.LimeGreen : Color.Red;
+            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.LimeGreen : Color.Red;
+
+            // すべてのボタンを前面に表示
+            controls.ESPStyleButton.BringToFront();
+            controls.NameButton.BringToFront();
+            controls.WeaponButton.BringToFront();
+            controls.HealthButton.BringToFront();
+            controls.DistanceButton.BringToFront();
+            _playerTypeSelector.BringToFront();
+        }
+
+        private void UpdateControlsVisibility(PlayerType type)
+        {
+            // すべてのコントロールを非表示
+            foreach (var controls in _playerTypeControls.Values)
+            {
+                controls.ESPStyleButton.Visible = false;
+                controls.NameButton.Visible = false;
+                controls.WeaponButton.Visible = false;
+                controls.HealthButton.Visible = false;
+                controls.DistanceButton.Visible = false;
+            }
+
+            // 選択されたタイプのコントロールを表示
+            if (_playerTypeControls.TryGetValue(type, out var selectedControls))
+            {
+                selectedControls.ESPStyleButton.Visible = true;
+                selectedControls.NameButton.Visible = true;
+                selectedControls.WeaponButton.Visible = true;
+                selectedControls.HealthButton.Visible = true;
+                selectedControls.DistanceButton.Visible = true;
+            }
+        }
+
+        private void ToggleESPStyle(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ESPStyle = (ESPStyle)(((int)settings.ESPStyle + 1) % 3);
+            controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
+            controls.ESPStyleButton.ForeColor = GetESPButtonColor(settings.ESPStyle);
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private void ToggleName(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ShowName = !settings.ShowName;
+            controls.NameButton.ForeColor = settings.ShowName ? Color.LimeGreen : Color.Red;
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private void ToggleWeapon(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ShowWeapon = !settings.ShowWeapon;
+            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.LimeGreen : Color.Red;
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private void ToggleHealth(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ShowHealth = !settings.ShowHealth;
+            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.LimeGreen : Color.Red;
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private void ToggleDistance(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ShowDistance = !settings.ShowDistance;
+            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.LimeGreen : Color.Red;
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private PlayerTypeSettings GetPlayerTypeSettings(PlayerType type)
+        {
+            // BEARとUSECの場合はPMCの設定を使用
+            if (type == PlayerType.BEAR || type == PlayerType.USEC)
+            {
+                type = PlayerType.PMC;
+            }
+
+            if (!this.config.AimviewSettings.PlayerTypeSettings.TryGetValue(type, out var settings))
+            {
+                settings = new PlayerTypeSettings();
+                this.config.AimviewSettings.PlayerTypeSettings[type] = settings;
+            }
+            return settings;
+        }
+
+        private string GetESPButtonText(ESPStyle style)
+        {
+            return style switch
+            {
+                ESPStyle.Skeleton => "SK",
+                ESPStyle.Box => "Box",
+                ESPStyle.Dot => "Dot",
+                _ => "SK"
+            };
+        }
+
+        private Color GetESPButtonColor(ESPStyle style)
+        {
+            return style switch
+            {
+                ESPStyle.Skeleton => Color.LimeGreen,
+                ESPStyle.Box => Color.Yellow,
+                ESPStyle.Dot => Color.Red,
+                _ => Color.Red
+            };
+        }
+
+        private Color GetESPButtonColor()
+        {
+            var settings = GetPlayerTypeSettings(_currentPlayerType);
+            return GetESPButtonColor(settings.ESPStyle);
+        }
+
+        private string GetESPButtonText()
+        {
+            var settings = GetPlayerTypeSettings(_currentPlayerType);
+            return GetESPButtonText(settings.ESPStyle);
         }
     }
 } 

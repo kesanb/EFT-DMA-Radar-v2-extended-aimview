@@ -417,13 +417,13 @@ namespace eft_dma_radar
         [JsonIgnore]
         public static Dictionary<string, AimviewObjectSettings> DefaultAimviewObjectSettings = new Dictionary<string, AimviewObjectSettings>()
         {
-            ["Player"] = new AimviewObjectSettings(true, true, false, false, 150, 150),
+            ["Player"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
             ["LooseLoot"] = new AimviewObjectSettings(true, true, true, true, 150, 150),
+            ["Container"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
             ["Corpse"] = new AimviewObjectSettings(true, true, true, true, 150, 150),
             ["QuestItem"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
-            ["Container"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
-            ["Tripwire"] = new AimviewObjectSettings(true, true, false, false, 150, 150),
             ["QuestZone"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
+            ["Tripwire"] = new AimviewObjectSettings(true, true, false, false, 150, 150),
             ["Exfil"] = new AimviewObjectSettings(true, true, true, false, 150, 150),
             ["Transit"] = new AimviewObjectSettings(true, true, true, false, 150, 150)
         };
@@ -618,6 +618,76 @@ namespace eft_dma_radar
                 "Timescale" => this.TimeScale,
                 _ => false
             };
+        }
+    }
+
+    public class AimviewSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = false;
+
+        [JsonPropertyName("Width")]
+        public int Width { get; set; } = 600;
+
+        [JsonPropertyName("Height")]
+        public int Height { get; set; } = 600;
+
+        [JsonPropertyName("X")]
+        public int X { get; set; } = 0;
+
+        [JsonPropertyName("Y")]
+        public int Y { get; set; } = 0;
+
+        [JsonPropertyName("TeammateID")]
+        public string TeammateID { get; set; } = string.Empty;
+
+        [JsonPropertyName("CrosshairStyle")]
+        public CrosshairStyle CrosshairStyle { get; set; } = CrosshairStyle.Cross;
+
+        [JsonPropertyName("CircleRadius")]
+        public float CircleRadius { get; set; } = 20f;
+
+        [JsonPropertyName("useTransparentBackground")]
+        public bool useTransparentBackground { get; set; } = false;
+
+        [JsonPropertyName("usePerformanceSkeleton")]
+        public bool usePerformanceSkeleton { get; set; } = false;
+
+        [JsonPropertyName("performanceSkeletonDistance")]
+        public float performanceSkeletonDistance { get; set; } = 120f;
+
+        [JsonPropertyName("ObjectSettings")]
+        public Dictionary<string, AimviewObjectSettings> ObjectSettings { get; set; }
+
+        [JsonPropertyName("PlayerTypeSettings")]
+        public Dictionary<PlayerType, PlayerTypeSettings> PlayerTypeSettings { get; set; } = new();
+
+        public AimviewSettings(bool enabled = false, int width = 600, int height = 600, int x = 0, int y = 0, string teammateId = "", Dictionary<string, AimviewObjectSettings> objectSettings = null)
+        {
+            Enabled = enabled;
+            Width = width;
+            Height = height;
+            X = x;
+            Y = y;
+            TeammateID = teammateId;
+            ObjectSettings = objectSettings ?? new Dictionary<string, AimviewObjectSettings>(Config.DefaultAimviewObjectSettings);
+
+            // プレイヤータイプごとのデフォルト設定を初期化
+            foreach (PlayerType type in Enum.GetValues(typeof(PlayerType)))
+            {
+                // BEARとUSECはスキップ（PMCとして統合）
+                if (type == PlayerType.BEAR || type == PlayerType.USEC)
+                    continue;
+
+                PlayerTypeSettings[type] = new PlayerTypeSettings
+                {
+                    ShowName = true,
+                    ShowDistance = true,
+                    ShowWeapon = true,
+                    ShowHealth = true,
+                    ESPStyle = ESPStyle.Skeleton
+                };
+            }
         }
     }
 }
