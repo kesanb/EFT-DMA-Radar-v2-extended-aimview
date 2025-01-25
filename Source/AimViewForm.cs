@@ -14,6 +14,7 @@ namespace eft_dma_radar
         public bool ShowDistance { get; set; } = true;
         public bool ShowWeapon { get; set; } = true;
         public bool ShowHealth { get; set; } = true;
+        public bool ShowTargetedAlert { get; set; } = true;
         public ESPStyle ESPStyle { get; set; } = ESPStyle.Skeleton;
     }
 
@@ -25,6 +26,7 @@ namespace eft_dma_radar
         public Button WeaponButton { get; set; }
         public Button HealthButton { get; set; }
         public Button DistanceButton { get; set; }
+        public Button TargetedAlertButton { get; set; }
     }
 
     public partial class AimViewForm : Form
@@ -543,7 +545,7 @@ namespace eft_dma_radar
                 }
 
                 if (objectSettings.Distance)
-                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY + textPaint.TextSize, textPaint);
+                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
             }
         }
 
@@ -741,6 +743,9 @@ namespace eft_dma_radar
             // 位置の更新が必要かチェック
             bool shouldUpdate = ShouldUpdatePosition(player.ProfileID, distance);
 
+            // プレイヤーが自分を狙っているかチェックし、警告を表示
+            DrawTargetingWarning(canvas, player, distance, paint);
+
             if (isWithinPaintDistance)
             {
                 switch (typeSettings.ESPStyle)
@@ -766,6 +771,25 @@ namespace eft_dma_radar
 
             // 定期的なキャッシュのクリーンアップ
             CleanupCaches();
+        }
+
+        /// <summary>
+        /// プレイヤーが自分を狙っているかチェックし、警告フレームを描画します
+        /// </summary>
+        private void DrawTargetingWarning(SKCanvas canvas, Player player, float distance, SKPaint basePaint)
+        {
+            var typeSettings = GetPlayerTypeSettings(player.Type);
+            if (this.LocalPlayer == null || !player.IsTargetingLocalPlayer || !typeSettings.ShowTargetedAlert)
+                return;
+
+            var bounds = this.GetAimviewBounds();
+            using var warningPaint = new SKPaint
+            {
+                Color = player.IsTargetingLocalPlayer ? basePaint.Color.WithAlpha(127) : SKColors.Transparent,
+                StrokeWidth = 10,
+                Style = SKPaintStyle.Stroke
+            };
+            canvas.DrawRect(bounds, warningPaint);
         }
 
         private void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings, PlayerTypeSettings typeSettings)
@@ -1044,7 +1068,9 @@ namespace eft_dma_radar
             }
             else
             {
+                this.FormBorderStyle = FormBorderStyle.None;
                 this.WindowState = FormWindowState.Maximized;
+                this.StartPosition = FormStartPosition.CenterScreen;
                 ((Button)sender).Text = "❐";
             }
         }
@@ -1326,6 +1352,7 @@ namespace eft_dma_radar
             // プレイヤータイプの追加
             _playerTypeSelector.Items.AddRange(new object[]
             {
+                PlayerType.ALL,
                 PlayerType.PMC,
                 PlayerType.Scav,
                 PlayerType.PlayerScav,
@@ -1350,34 +1377,36 @@ namespace eft_dma_radar
 
         private void InitializeControlsForPlayerType(PlayerType type)
         {
+            var controls = new PlayerTypeControls();
             var settings = GetPlayerTypeSettings(type);
-            var controls = new PlayerTypeControls
-            {
-                ESPStyleButton = CreateButton("SK", new Point(215, 5), GetESPButtonColor(settings.ESPStyle), (s, e) => ToggleESPStyle(type)),
-                NameButton = CreateButton("Na", new Point(250, 5), settings.ShowName ? Color.LimeGreen : Color.Red, (s, e) => ToggleName(type)),
-                WeaponButton = CreateButton("We", new Point(285, 5), settings.ShowWeapon ? Color.LimeGreen : Color.Red, (s, e) => ToggleWeapon(type)),
-                HealthButton = CreateButton("HP", new Point(320, 5), settings.ShowHealth ? Color.LimeGreen : Color.Red, (s, e) => ToggleHealth(type)),
-                DistanceButton = CreateButton("Dis", new Point(355, 5), settings.ShowDistance ? Color.LimeGreen : Color.Red, (s, e) => ToggleDistance(type))
-            };
 
-            // ESPスタイルのテキストを設定
-            controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
+            // ESPスタイルボタン
+            controls.ESPStyleButton = CreateButton(GetESPButtonText(settings.ESPStyle), new Point(5, 30), GetESPButtonColor(settings.ESPStyle), (s, e) => ToggleESPStyle(type));
+
+            // 名前表示ボタン
+            controls.NameButton = CreateButton("N", new Point(40, 30), settings.ShowName ? Color.Green : Color.Red, (s, e) => ToggleName(type));
+
+            // 武器表示ボタン
+            controls.WeaponButton = CreateButton("W", new Point(75, 30), settings.ShowWeapon ? Color.Green : Color.Red, (s, e) => ToggleWeapon(type));
+
+            // 体力表示ボタン
+            controls.HealthButton = CreateButton("H", new Point(110, 30), settings.ShowHealth ? Color.Green : Color.Red, (s, e) => ToggleHealth(type));
+
+            // 距離表示ボタン
+            controls.DistanceButton = CreateButton("D", new Point(145, 30), settings.ShowDistance ? Color.Green : Color.Red, (s, e) => ToggleDistance(type));
+
+            // 狙われ警告ボタン
+            controls.TargetedAlertButton = CreateButton("⚠", new Point(180, 30), settings.ShowTargetedAlert ? Color.Green : Color.Red, (s, e) => ToggleTargetedAlert(type));
 
             _playerTypeControls[type] = controls;
 
-            // コントロールをフォームに追加
+            // ボタンをフォームに追加
             this.Controls.Add(controls.ESPStyleButton);
             this.Controls.Add(controls.NameButton);
             this.Controls.Add(controls.WeaponButton);
             this.Controls.Add(controls.HealthButton);
             this.Controls.Add(controls.DistanceButton);
-
-            // 初期状態では非表示
-            controls.ESPStyleButton.Visible = false;
-            controls.NameButton.Visible = false;
-            controls.WeaponButton.Visible = false;
-            controls.HealthButton.Visible = false;
-            controls.DistanceButton.Visible = false;
+            this.Controls.Add(controls.TargetedAlertButton);
         }
 
         private Button CreateButton(string text, Point location, Color foreColor, EventHandler clickHandler)
@@ -1421,10 +1450,11 @@ namespace eft_dma_radar
             // ボタンの状態を更新
             controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
             controls.ESPStyleButton.ForeColor = GetESPButtonColor(settings.ESPStyle);
-            controls.NameButton.ForeColor = settings.ShowName ? Color.LimeGreen : Color.Red;
-            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.LimeGreen : Color.Red;
-            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.LimeGreen : Color.Red;
-            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.LimeGreen : Color.Red;
+            controls.NameButton.ForeColor = settings.ShowName ? Color.Green : Color.Red;
+            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.Green : Color.Red;
+            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.Green : Color.Red;
+            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.Green : Color.Red;
+            controls.TargetedAlertButton.ForeColor = settings.ShowTargetedAlert ? Color.Green : Color.Red;
 
             // すべてのボタンを前面に表示
             controls.ESPStyleButton.BringToFront();
@@ -1432,12 +1462,12 @@ namespace eft_dma_radar
             controls.WeaponButton.BringToFront();
             controls.HealthButton.BringToFront();
             controls.DistanceButton.BringToFront();
+            controls.TargetedAlertButton.BringToFront();
             _playerTypeSelector.BringToFront();
         }
 
         private void UpdateControlsVisibility(PlayerType type)
         {
-            // すべてのコントロールを非表示
             foreach (var controls in _playerTypeControls.Values)
             {
                 controls.ESPStyleButton.Visible = false;
@@ -1445,9 +1475,9 @@ namespace eft_dma_radar
                 controls.WeaponButton.Visible = false;
                 controls.HealthButton.Visible = false;
                 controls.DistanceButton.Visible = false;
+                controls.TargetedAlertButton.Visible = false;
             }
 
-            // 選択されたタイプのコントロールを表示
             if (_playerTypeControls.TryGetValue(type, out var selectedControls))
             {
                 selectedControls.ESPStyleButton.Visible = true;
@@ -1455,6 +1485,7 @@ namespace eft_dma_radar
                 selectedControls.WeaponButton.Visible = true;
                 selectedControls.HealthButton.Visible = true;
                 selectedControls.DistanceButton.Visible = true;
+                selectedControls.TargetedAlertButton.Visible = true;
             }
         }
 
@@ -1467,6 +1498,25 @@ namespace eft_dma_radar
             settings.ESPStyle = (ESPStyle)(((int)settings.ESPStyle + 1) % 3);
             controls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
             controls.ESPStyleButton.ForeColor = GetESPButtonColor(settings.ESPStyle);
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ESPStyle = settings.ESPStyle;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.ESPStyleButton.Text = GetESPButtonText(settings.ESPStyle);
+                        playerControls.ESPStyleButton.ForeColor = GetESPButtonColor(settings.ESPStyle);
+                    }
+                }
+            }
             this.aimViewCanvas.Invalidate();
         }
 
@@ -1477,7 +1527,25 @@ namespace eft_dma_radar
 
             var settings = GetPlayerTypeSettings(type);
             settings.ShowName = !settings.ShowName;
-            controls.NameButton.ForeColor = settings.ShowName ? Color.LimeGreen : Color.Red;
+            controls.NameButton.ForeColor = settings.ShowName ? Color.Green : Color.Red;
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ShowName = settings.ShowName;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.NameButton.ForeColor = settings.ShowName ? Color.Green : Color.Red;
+                    }
+                }
+            }
             this.aimViewCanvas.Invalidate();
         }
 
@@ -1488,7 +1556,25 @@ namespace eft_dma_radar
 
             var settings = GetPlayerTypeSettings(type);
             settings.ShowWeapon = !settings.ShowWeapon;
-            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.LimeGreen : Color.Red;
+            controls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.Green : Color.Red;
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ShowWeapon = settings.ShowWeapon;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.WeaponButton.ForeColor = settings.ShowWeapon ? Color.Green : Color.Red;
+                    }
+                }
+            }
             this.aimViewCanvas.Invalidate();
         }
 
@@ -1499,7 +1585,25 @@ namespace eft_dma_radar
 
             var settings = GetPlayerTypeSettings(type);
             settings.ShowHealth = !settings.ShowHealth;
-            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.LimeGreen : Color.Red;
+            controls.HealthButton.ForeColor = settings.ShowHealth ? Color.Green : Color.Red;
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ShowHealth = settings.ShowHealth;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.HealthButton.ForeColor = settings.ShowHealth ? Color.Green : Color.Red;
+                    }
+                }
+            }
             this.aimViewCanvas.Invalidate();
         }
 
@@ -1510,7 +1614,54 @@ namespace eft_dma_radar
 
             var settings = GetPlayerTypeSettings(type);
             settings.ShowDistance = !settings.ShowDistance;
-            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.LimeGreen : Color.Red;
+            controls.DistanceButton.ForeColor = settings.ShowDistance ? Color.Green : Color.Red;
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ShowDistance = settings.ShowDistance;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.DistanceButton.ForeColor = settings.ShowDistance ? Color.Green : Color.Red;
+                    }
+                }
+            }
+            this.aimViewCanvas.Invalidate();
+        }
+
+        private void ToggleTargetedAlert(PlayerType type)
+        {
+            if (!_playerTypeControls.TryGetValue(type, out var controls))
+                return;
+
+            var settings = GetPlayerTypeSettings(type);
+            settings.ShowTargetedAlert = !settings.ShowTargetedAlert;
+            controls.TargetedAlertButton.ForeColor = settings.ShowTargetedAlert ? Color.Green : Color.Red;
+
+            // ALLが選択されている場合、すべてのプレイヤータイプに設定を適用
+            if (type == PlayerType.ALL)
+            {
+                foreach (var playerType in Enum.GetValues(typeof(PlayerType)).Cast<PlayerType>())
+                {
+                    // ALLとBEAR/USECはスキップ
+                    if (playerType == PlayerType.ALL || playerType == PlayerType.BEAR || playerType == PlayerType.USEC)
+                        continue;
+
+                    var playerSettings = GetPlayerTypeSettings(playerType);
+                    playerSettings.ShowTargetedAlert = settings.ShowTargetedAlert;
+                    if (_playerTypeControls.TryGetValue(playerType, out var playerControls))
+                    {
+                        playerControls.TargetedAlertButton.ForeColor = settings.ShowTargetedAlert ? Color.Green : Color.Red;
+                    }
+                }
+            }
             this.aimViewCanvas.Invalidate();
         }
 
@@ -1522,9 +1673,18 @@ namespace eft_dma_radar
                 type = PlayerType.PMC;
             }
 
+            // 設定が存在しない場合は新しい設定を作成
             if (!this.config.AimviewSettings.PlayerTypeSettings.TryGetValue(type, out var settings))
             {
-                settings = new PlayerTypeSettings();
+                settings = new PlayerTypeSettings
+                {
+                    ShowName = true,
+                    ShowDistance = true,
+                    ShowWeapon = true,
+                    ShowHealth = true,
+                    ShowTargetedAlert = true,
+                    ESPStyle = ESPStyle.Skeleton
+                };
                 this.config.AimviewSettings.PlayerTypeSettings[type] = settings;
             }
             return settings;

@@ -320,6 +320,7 @@ namespace eft_dma_radar
     /// </summary>
     public enum PlayerType
     {
+        ALL,
         Default,
         LocalPlayer,
         Teammate,
