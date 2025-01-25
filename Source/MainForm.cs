@@ -1530,9 +1530,11 @@ namespace eft_dma_radar
 
                                 var friendlyMapPos = friendlyPos.ToMapPos(this.selectedMap);
 
-                                if (IsAggressorFacingTarget(playerMapPos.GetPoint(), player.Rotation.X, friendlyMapPos.GetPoint(), friendlyDist))
+                                player.IsTargetingLocalPlayer = false; 
+                                if (friendly.IsLocalPlayer && IsAggressorFacingTarget(playerMapPos.GetPoint(), player.Rotation.X, friendlyMapPos.GetPoint(), friendlyDist))
                                 {
                                     aimlineLength = 1000;
+                                    player.IsTargetingLocalPlayer = true;
                                     break;
                                 }
                             }

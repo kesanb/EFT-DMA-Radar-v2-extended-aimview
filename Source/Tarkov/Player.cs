@@ -275,6 +275,12 @@ namespace eft_dma_radar
         {
             get => !this.IsActive && this.IsAlive;
         }
+
+        /// <summary>
+        /// プレイヤーがローカルプレイヤーを狙っているかどうかを示します。
+        /// </summary>
+        public bool IsTargetingLocalPlayer { get; set; }
+
         /// <summary>
         /// Gets value of player.
         /// </summary>

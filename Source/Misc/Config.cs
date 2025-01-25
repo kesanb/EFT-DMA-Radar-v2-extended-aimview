@@ -673,10 +673,20 @@ namespace eft_dma_radar
             ObjectSettings = objectSettings ?? new Dictionary<string, AimviewObjectSettings>(Config.DefaultAimviewObjectSettings);
 
             // プレイヤータイプごとのデフォルト設定を初期化
+            PlayerTypeSettings[PlayerType.ALL] = new PlayerTypeSettings
+            {
+                ShowName = true,
+                ShowDistance = true,
+                ShowWeapon = true,
+                ShowHealth = true,
+                ESPStyle = ESPStyle.Skeleton
+            };
+
             foreach (PlayerType type in Enum.GetValues(typeof(PlayerType)))
             {
                 // BEARとUSECはスキップ（PMCとして統合）
-                if (type == PlayerType.BEAR || type == PlayerType.USEC)
+                // ALLはすでに設定済み
+                if (type == PlayerType.BEAR || type == PlayerType.USEC || type == PlayerType.ALL)
                     continue;
 
                 PlayerTypeSettings[type] = new PlayerTypeSettings
