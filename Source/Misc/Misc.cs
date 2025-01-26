@@ -152,6 +152,9 @@ namespace eft_dma_radar
         public bool Value { get; set; }
         public bool Health { get; set; }
         public bool Tag { get; set; }
+        public bool Level { get; set; }
+        public bool KDR { get; set; }
+        public bool Hours { get; set; }
         public int FlagsFont { get; set; }
         public int FlagsFontSize { get; set; }
 
@@ -159,8 +162,8 @@ namespace eft_dma_radar
             bool name, bool height, bool distance, bool aimline,
             int aimlineLength, int aimlineOpacity, int font, int fontSize,
             bool flags, bool activeWeapon, bool thermal, bool nightVision,
-            bool gear, bool ammoType, bool group, bool value, bool health, 
-            bool tag, int flagsFont, int flagsFontSize)
+            bool gear, bool ammoType, bool group, bool value, bool health, bool tag,
+            bool level, bool kdr, bool hours, int flagsFont, int flagsFontSize)
         {
             this.Name = name;
             this.Height = height;
@@ -180,6 +183,9 @@ namespace eft_dma_radar
             this.Value = value;
             this.Health = health;
             this.Tag = tag;
+            this.Level = level;
+            this.KDR = kdr;
+            this.Hours = hours;
             this.FlagsFont = flagsFont;
             this.FlagsFontSize = flagsFontSize;
         }

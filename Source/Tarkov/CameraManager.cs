@@ -479,10 +479,18 @@ namespace eft_dma_radar
 
         public void UpdateViewMatrix()
         {
-            if (this._swRefreshVM.ElapsedMilliseconds >= 10 && Memory.LocalPlayer is not null && Memory.IsValidPtr(this._viewMatrixPtr))
+            if (!this.IsReady && this._swRefreshVM.ElapsedMilliseconds >= 1000)
             {
-                this._viewMatrix = Memory.ReadValue<Matrix4x4>(this._viewMatrixPtr + Offsets.ViewMatrix.Matrix);
+                this.GetCamera();
                 this._swRefreshVM.Restart();
+            }
+            else if (this.IsReady)
+            {
+                if (this._swRefreshVM.ElapsedMilliseconds >= 10 && Memory.LocalPlayer is not null)
+                {
+                    this._viewMatrix = Memory.ReadValue<Matrix4x4>(this._viewMatrixPtr + Offsets.ViewMatrix.Matrix);
+                    this._swRefreshVM.Restart();
+                }
             }
         }
     }

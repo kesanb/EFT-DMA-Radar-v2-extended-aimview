@@ -169,7 +169,8 @@ namespace eft_dma_radar
 
             if (this._swExtractTimer.ElapsedMilliseconds >= timeToExtract)
             {
-                Memory.Chams.RestorePointers();
+                if (Program.Config.MasterSwitch && Program.Config.Chams["Enabled"] && Memory.Chams is not null)
+                    Memory.Chams.RestorePointers();
                 this.ResetExtractTimer();
             }
         }

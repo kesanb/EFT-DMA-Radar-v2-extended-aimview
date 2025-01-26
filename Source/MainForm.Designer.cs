@@ -499,6 +499,9 @@
             colLootFilterItemName = new ColumnHeader();
             colLootFilterItemValue = new ColumnHeader();
             iconList = new ImageList(components);
+            swPlayerInfoLevel = new MaterialSkin.Controls.MaterialSwitch();
+            swPlayerInfoKD = new MaterialSkin.Controls.MaterialSwitch();
+            swPlayerInfoHours = new MaterialSkin.Controls.MaterialSwitch();
             tabControlMain.SuspendLayout();
             tabRadar.SuspendLayout();
             mcRadarLootItemViewer.SuspendLayout();
@@ -3159,7 +3162,7 @@
             cboPlayerInfoFlagsFont.Hint = "Flags Font";
             cboPlayerInfoFlagsFont.IntegralHeight = false;
             cboPlayerInfoFlagsFont.ItemHeight = 29;
-            cboPlayerInfoFlagsFont.Location = new Point(17, 323);
+            cboPlayerInfoFlagsFont.Location = new Point(17, 376);
             cboPlayerInfoFlagsFont.MaxDropDownItems = 10;
             cboPlayerInfoFlagsFont.MouseState = MaterialSkin.MouseState.OUT;
             cboPlayerInfoFlagsFont.Name = "cboPlayerInfoFlagsFont";
@@ -3174,7 +3177,7 @@
             // 
             sldrPlayerInfoFlagsFontSize.Depth = 0;
             sldrPlayerInfoFlagsFontSize.ForeColor = Color.Black;
-            sldrPlayerInfoFlagsFontSize.Location = new Point(203, 318);
+            sldrPlayerInfoFlagsFontSize.Location = new Point(203, 371);
             sldrPlayerInfoFlagsFontSize.MouseState = MaterialSkin.MouseState.HOVER;
             sldrPlayerInfoFlagsFontSize.Name = "sldrPlayerInfoFlagsFontSize";
             sldrPlayerInfoFlagsFontSize.RangeMax = 36;
@@ -5717,6 +5720,9 @@
             // mcSettingsGeneralPlayerInformation
             // 
             mcSettingsGeneralPlayerInformation.BackColor = Color.FromArgb(255, 255, 255);
+            mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoLevel);
+            mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoKD);
+            mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoHours);
             mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoGear);
             mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoAmmoType);
             mcSettingsGeneralPlayerInformation.Controls.Add(swPlayerInfoNightVision);
@@ -5746,7 +5752,7 @@
             mcSettingsGeneralPlayerInformation.MouseState = MaterialSkin.MouseState.HOVER;
             mcSettingsGeneralPlayerInformation.Name = "mcSettingsGeneralPlayerInformation";
             mcSettingsGeneralPlayerInformation.Padding = new Padding(14);
-            mcSettingsGeneralPlayerInformation.Size = new Size(661, 374);
+            mcSettingsGeneralPlayerInformation.Size = new Size(661, 437);
             mcSettingsGeneralPlayerInformation.TabIndex = 32;
             // 
             // lblSettingsGeneralPlayerInformation
@@ -8371,6 +8377,57 @@
             iconList.Images.SetKeyName(3, "watchlist.png");
             iconList.Images.SetKeyName(4, "loot.png");
             // 
+            // swPlayerInfoLevel
+            // 
+            swPlayerInfoLevel.Depth = 0;
+            swPlayerInfoLevel.Font = new Font("Segoe UI", 9F);
+            swPlayerInfoLevel.Location = new Point(17, 327);
+            swPlayerInfoLevel.Margin = new Padding(0);
+            swPlayerInfoLevel.MouseLocation = new Point(-1, -1);
+            swPlayerInfoLevel.MouseState = MaterialSkin.MouseState.HOVER;
+            swPlayerInfoLevel.Name = "swPlayerInfoLevel";
+            swPlayerInfoLevel.Ripple = true;
+            swPlayerInfoLevel.Size = new Size(110, 28);
+            swPlayerInfoLevel.TabIndex = 64;
+            swPlayerInfoLevel.Text = "Level";
+            toolTip.SetToolTip(swPlayerInfoLevel, "Shows the players level");
+            swPlayerInfoLevel.UseVisualStyleBackColor = true;
+            swPlayerInfoLevel.CheckedChanged += swPlayerInfoLevel_CheckedChanged;
+            // 
+            // swPlayerInfoKD
+            // 
+            swPlayerInfoKD.Depth = 0;
+            swPlayerInfoKD.Font = new Font("Segoe UI", 9F);
+            swPlayerInfoKD.Location = new Point(169, 327);
+            swPlayerInfoKD.Margin = new Padding(0);
+            swPlayerInfoKD.MouseLocation = new Point(-1, -1);
+            swPlayerInfoKD.MouseState = MaterialSkin.MouseState.HOVER;
+            swPlayerInfoKD.Name = "swPlayerInfoKD";
+            swPlayerInfoKD.Ripple = true;
+            swPlayerInfoKD.Size = new Size(119, 28);
+            swPlayerInfoKD.TabIndex = 63;
+            swPlayerInfoKD.Text = "KDR";
+            toolTip.SetToolTip(swPlayerInfoKD, "Shows the players KD");
+            swPlayerInfoKD.UseVisualStyleBackColor = true;
+            swPlayerInfoKD.CheckedChanged += swPlayerInfoKD_CheckedChanged;
+            // 
+            // swPlayerInfoHours
+            // 
+            swPlayerInfoHours.Depth = 0;
+            swPlayerInfoHours.Font = new Font("Segoe UI", 9F);
+            swPlayerInfoHours.Location = new Point(291, 327);
+            swPlayerInfoHours.Margin = new Padding(0);
+            swPlayerInfoHours.MouseLocation = new Point(-1, -1);
+            swPlayerInfoHours.MouseState = MaterialSkin.MouseState.HOVER;
+            swPlayerInfoHours.Name = "swPlayerInfoHours";
+            swPlayerInfoHours.Ripple = true;
+            swPlayerInfoHours.Size = new Size(118, 28);
+            swPlayerInfoHours.TabIndex = 62;
+            swPlayerInfoHours.Text = "Hours";
+            toolTip.SetToolTip(swPlayerInfoHours, "Shows the players hours");
+            swPlayerInfoHours.UseVisualStyleBackColor = true;
+            swPlayerInfoHours.CheckedChanged += swPlayerInfoHours_CheckedChanged;
+            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -8986,6 +9043,8 @@
         private MaterialSkin.Controls.MaterialSwitch swAVTransitDistance;
         private MaterialSkin.Controls.MaterialSlider sldrAVContainerPaintDistance;
         private MaterialSkin.Controls.MaterialSlider sldrAVTripwirePaintDistance;
+        private MaterialSkin.Controls.MaterialSwitch swPlayerInfoLevel;
+        private MaterialSkin.Controls.MaterialSwitch swPlayerInfoKD;
+        private MaterialSkin.Controls.MaterialSwitch swPlayerInfoHours;
     }
 }
-

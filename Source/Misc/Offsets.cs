@@ -148,6 +148,7 @@
         public const uint AccountID = 0x58; // [58] string_0x58 : String
         public const uint PlayerBody = 0x68; // [68] playerBody_0x68 : EFT.PlayerBody
         public const uint ObservedPlayerController = 0x88; // [88] gClass24AC_0x88 : -.GClass24AC
+        public const uint VoiceName = 0x98; // [98] string_0x98 : String
         public const uint PlayerSide = 0x100; // [100] int32_0x100 : System.Int32
         public const uint IsAI = 0x110; // [110] boolean_0x110 : Boolean
         public static readonly uint[] To_MovementContext = new uint[] { ObservedPlayerController, 0xC8, 0x10 }; // to MovementContext

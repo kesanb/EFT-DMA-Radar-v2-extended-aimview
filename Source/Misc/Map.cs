@@ -692,6 +692,16 @@ namespace eft_dma_radar
             if (player.Type == PlayerType.Special)
                 lines.Insert(0, $"Tag: {player.Tag}");
 
+            if (player.IsHuman)
+            {
+                if (player.Level > 0)
+                    lines.Insert(0, $"Level: {player.Level}");
+                if (player.KDA > 0)
+                    lines.Insert(0, $"KD: {player.KDA}");
+                if (player.Hours > 0)
+                    lines.Insert(0, $"Hours: {player.Hours}");
+            }
+
             if (player.Gear is not null)
             {
                 foreach (var gear in player.Gear)
