@@ -326,7 +326,6 @@ namespace eft_dma_radar
     /// </summary>
     public enum PlayerType
     {
-        ALL,
         Default,
         LocalPlayer,
         Teammate,
@@ -345,7 +344,8 @@ namespace eft_dma_radar
         BossFollower,
         FollowerOfMorana,
         Cultist,
-        Zombie
+        Zombie,
+        ALL
     }
 
     public enum PlayerBones
