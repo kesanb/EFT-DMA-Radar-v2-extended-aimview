@@ -66,27 +66,18 @@ namespace eft_dma_radar
         // RestartRadarのコールバック
         public Action OnRestartRadarRequested { get; set; }
 
-        // キャッシュシステムの追加
-        private readonly ConcurrentDictionary<string, SKPaint> _paintCache = new();
-        private readonly ConcurrentDictionary<string, DateTime> _lastUpdateTime = new();
-        private readonly ConcurrentDictionary<string, Vector2> _lastPositions = new();
-        private DateTime _lastCleanupTime = DateTime.Now;
-        private const int CLEANUP_INTERVAL_MS = 5000; // 5秒ごとにクリーンアップ
-
-        // メモリプール用の静的フィールド
-        private static readonly ConcurrentDictionary<string, Queue<SKPaint>> _paintPool = new();
-        private static readonly ConcurrentDictionary<string, Queue<SKPath>> _pathPool = new();
-        private const int POOL_SIZE = 100;
-        private const int MAX_CACHED_OBJECTS = 1000;
-
         // プレイヤータイプごとのUIコントロールを管理
         private readonly Dictionary<PlayerType, PlayerTypeControls> _playerTypeControls = new();
         private ComboBox _playerTypeSelector;
         private PlayerType _currentPlayerType = PlayerType.PMC;
 
+        // ESP描画システム
+        private readonly ESP esp;
+
         public AimViewForm(Config config)
         {
             this.config = config;
+            this.esp = new ESP(config);
             
             // フォームの基本設定
             this.Text = "AimView";
@@ -207,7 +198,16 @@ namespace eft_dma_radar
             this.config.AimviewSettings.Enabled = false;
         }
 
-        private void AimViewCanvas_PaintSurface(object sender, SKPaintGLSurfaceEventArgs e)
+        public void UpdateAndRedraw()
+        {
+            _currentFrame++;
+            if (this.aimViewCanvas != null && !this.aimViewCanvas.IsDisposed)
+            {
+                this.aimViewCanvas.Invalidate();
+            }
+        }
+
+        private void AimViewCanvas_PaintSurface(object sender, SKPaintGLSurfaceEventArgs e) // メインループ
         {
             if (!this.config.AimviewSettings.Enabled)
                 return;
@@ -230,16 +230,7 @@ namespace eft_dma_radar
             }
         }
 
-        public void UpdateAndRedraw()
-        {
-            _currentFrame++;
-            if (this.aimViewCanvas != null && !this.aimViewCanvas.IsDisposed)
-            {
-                this.aimViewCanvas.Invalidate();
-            }
-        }
-
-        private void DrawAimview(SKCanvas canvas)
+        private void DrawAimview(SKCanvas canvas) // 描画処理
         {
             if (!this.config.AimviewSettings.Enabled)
                 return;
@@ -248,7 +239,7 @@ namespace eft_dma_radar
             if (this.LocalPlayer == null || this.AllPlayers == null || this.CameraManager?.ViewMatrix == null)
             {
                 // クロスヘアのみ描画
-                this.DrawCrosshair(canvas, this.GetAimviewBounds());
+                this.DrawCrosshair(canvas, esp.GetAimviewBounds(canvas));
                 return;
             }
 
@@ -256,11 +247,11 @@ namespace eft_dma_radar
             if (!Memory.Ready || !Memory.InGame)
             {
                 // クロスヘアのみ描画
-                this.DrawCrosshair(canvas, this.GetAimviewBounds());
+                this.DrawCrosshair(canvas, esp.GetAimviewBounds(canvas));
                 return;
             }
 
-            var aimviewBounds = this.GetAimviewBounds();
+            var aimviewBounds = esp.GetAimviewBounds(canvas);
             Vector3 myPosition;
             try
             {
@@ -269,67 +260,57 @@ namespace eft_dma_radar
             catch
             {
                 // Position取得に失敗した場合は描画を中止
-                this.DrawCrosshair(canvas, aimviewBounds);
+                this.DrawCrosshair(canvas, esp.GetAimviewBounds(canvas));
                 return;
             }
 
             var aimviewSettings = this.config.AimviewSettings;
 
             // クロスヘアの描画
-            this.DrawCrosshair(canvas, aimviewBounds);
+            this.DrawCrosshair(canvas, esp.GetAimviewBounds(canvas));
 
-            // RENDER PLAYERS - with skeleton
+            // RENDER PLAYERS
             var playerSettings = aimviewSettings.ObjectSettings["Player"];
             if (playerSettings != null && playerSettings.Enabled)
             {
-                // プレイヤーデータが有効な場合のみ描画を行う
-                // LocalPlayerとAllPlayersの存在チェックを優先し、より柔軟な条件にする
-                if (this.LocalPlayer != null && this.AllPlayers != null && this.CameraManager?.ViewMatrix != null)
+                var maxDistance = Math.Max(playerSettings.PaintDistance, playerSettings.TextDistance);
+                var activePlayers = this.AllPlayers
+                    .Select(x => x.Value)
+                    .Where(p => p != null && p != this.LocalPlayer && p.IsActive && p.IsAlive)
+                    .Where(p => Vector3.Distance(myPosition, p.Position) <= maxDistance)
+                    .ToList();
+
+                foreach (var player in activePlayers)
                 {
-                    var maxDistance = Math.Max(playerSettings.PaintDistance, playerSettings.TextDistance);
-                    var activePlayers = this.AllPlayers
-                        .Select(x => x.Value)
-                        .Where(p => p != null && p != this.LocalPlayer && p.IsActive && p.IsAlive)
-                        .Where(p => Vector3.Distance(myPosition, p.Position) <= maxDistance)
-                        .ToList();
+                    var dist = Vector3.Distance(myPosition, player.Position);
 
-                    // プレイヤーが見つかった場合のみ描画処理を続行
-                    if (activePlayers.Any())
-                    {
-                        foreach (var player in activePlayers)
-                        {
-                            var dist = Vector3.Distance(myPosition, player.Position);
+                    // プレイヤーのボーン情報を確認（最適化：早期リターン）
+                    if (player.Bones == null || player.Bones.Count == 0)
+                        continue;
 
-                            // プレイヤーのボーン情報を確認（最適化：早期リターン）
-                            if (player.Bones == null || player.Bones.Count == 0)
-                                continue;
+                    // 骨盤の位置を基準点として使用
+                    if (!player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
+                        continue;
 
-                            // 骨盤の位置を基準点として使用
-                            if (!player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
-                                continue;
+                    var screenPos = esp.WorldToScreen(pelvisBone.Position, canvas);
+                    if (screenPos == null || !esp.IsWithinDrawingBounds(screenPos.Value, aimviewBounds))
+                        continue;
 
-                            if (!this.TryGetScreenPosition(pelvisBone.Position, aimviewBounds, out Vector2 screenPos))
-                                continue;
-
-                            if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
-                            {
-                                this.DrawAimviewPlayer(canvas, player, screenPos, dist, playerSettings);
-                            }
-                        }
-                    }
+                    esp.SetUIScale(this.uiScale);
+                    esp.DrawPlayer(canvas, player, screenPos.Value, dist, playerSettings, this.LocalPlayer);
                 }
             }
 
-            // RENDER LOOT（最適化：距離チェックを1回に）
+            // RENDER LOOT
             var looseLootSettings = aimviewSettings.ObjectSettings["LooseLoot"];
             var containerSettings = aimviewSettings.ObjectSettings["Container"];
             var corpseSettings = aimviewSettings.ObjectSettings["Corpse"];
+
             if ((looseLootSettings?.Enabled ?? false) || 
                 (containerSettings?.Enabled ?? false) || 
                 (corpseSettings?.Enabled ?? false))
             {
-                // レイド中かつLootが有効な場合のみ描画を行う
-                if (this.config.ProcessLoot && this.Loot?.Filter != null && this.LocalPlayer != null && this.CameraManager?.ViewMatrix != null)
+                if (this.config.ProcessLoot && this.Loot?.Filter != null)
                 {
                     var maxLootDistance = Math.Max(
                         Math.Max(
@@ -343,309 +324,41 @@ namespace eft_dma_radar
                         .Where(i => i != null && Vector3.Distance(myPosition, i.Position) <= maxLootDistance)
                         .ToList();
 
-                    foreach (var item in nearbyLoot)
-                    {
-                        var dist = Vector3.Distance(myPosition, item.Position);
-                        var objectSettings = item switch
-                        {
-                            LootItem => looseLootSettings,
-                            LootContainer => containerSettings,
-                            LootCorpse => corpseSettings,
-                            _ => null
-                        };
+                    // Draw loot items based on their type
+                    var items = nearbyLoot.OfType<LootItem>().ToList();
+                    if (items.Any() && looseLootSettings?.Enabled == true)
+                        esp.DrawLootItems(canvas, items, myPosition, looseLootSettings);
 
-                        if (objectSettings == null || (!objectSettings.Enabled || (dist > objectSettings.PaintDistance && dist > objectSettings.TextDistance)))
-                            continue;
+                    var containers = nearbyLoot.OfType<LootContainer>().ToList();
+                    if (containers.Any() && containerSettings?.Enabled == true)
+                        esp.DrawLootItems(canvas, containers, myPosition, containerSettings);
 
-                        if (!this.TryGetScreenPosition(item.Position, aimviewBounds, out Vector2 screenPos))
-                            continue;
-
-                        if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
-                            this.DrawLootableObject(canvas, item, screenPos, dist, objectSettings);
-                    }
+                    var corpses = nearbyLoot.OfType<LootCorpse>().ToList();
+                    if (corpses.Any() && corpseSettings?.Enabled == true)
+                        esp.DrawLootItems(canvas, corpses, myPosition, corpseSettings);
                 }
             }
 
-            // RENDER TRIPWIRES（最適化：距離チェックを1回に）
+            // RENDER TRIPWIRES
             var tripwireSettings = aimviewSettings.ObjectSettings["Tripwire"];
-            if (tripwireSettings.Enabled && this.Tripwires != null)
+            if (tripwireSettings?.Enabled == true && this.Tripwires != null)
             {
-                var maxTripwireDistance = Math.Max(tripwireSettings.PaintDistance, tripwireSettings.TextDistance);
-                var nearbyTripwires = this.Tripwires
-                    .Where(t => Vector3.Distance(myPosition, t.FromPos) <= maxTripwireDistance)
-                    .ToList();
-
-                foreach (var tripwire in nearbyTripwires)
-                {
-                    var dist = Vector3.Distance(myPosition, tripwire.FromPos);
-                    var toPos = tripwire.ToPos;
-
-                    if (!this.TryGetScreenPosition(tripwire.FromPos, aimviewBounds, out Vector2 fromScreenPos))
-                        continue;
-                    if (!this.TryGetScreenPosition(toPos, aimviewBounds, out Vector2 toScreenPos))
-                        continue;
-
-                    if (this.IsWithinDrawingBounds(fromScreenPos, aimviewBounds))
-                        this.DrawAimviewTripwire(canvas, tripwire, fromScreenPos, toScreenPos, dist, tripwireSettings);
-                }
+                esp.DrawTripwires(canvas, this.Tripwires, myPosition, tripwireSettings);
             }
 
-            // RENDER EXFIL（最適化：距離チェックを1回に）
+            // RENDER EXFILS
             var exfilSettings = aimviewSettings.ObjectSettings["Exfil"];
-            if (exfilSettings.Enabled && this.Exfils != null)
+            if (exfilSettings?.Enabled == true && this.Exfils != null)
             {
-                var nearbyExfils = this.Exfils
-                    .Where(e => Vector3.Distance(myPosition, e.Position) <= exfilSettings.TextDistance)
-                    .ToList();
-
-                foreach (var exfil in nearbyExfils)
-                {
-                    if (!this.TryGetScreenPosition(exfil.Position, aimviewBounds, out Vector2 screenPos))
-                        continue;
-
-                    if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
-                        this.DrawAimviewExfil(canvas, exfil, screenPos, Vector3.Distance(myPosition, exfil.Position), exfilSettings);
-                }
+                esp.DrawExfils(canvas, this.Exfils, myPosition, exfilSettings);
             }
 
-            // RENDER TRANSIT（最適化：距離チェックを1回に）
+            // RENDER TRANSITS
             var transitSettings = aimviewSettings.ObjectSettings["Transit"];
-            if (transitSettings.Enabled && this.Transits != null)
+            if (transitSettings?.Enabled == true && this.Transits != null)
             {
-                var nearbyTransits = this.Transits
-                    .Where(t => Vector3.Distance(myPosition, t.Position) <= transitSettings.TextDistance)
-                    .ToList();
-
-                foreach (var transit in nearbyTransits)
-                {
-                    if (!this.TryGetScreenPosition(transit.Position, aimviewBounds, out Vector2 screenPos))
-                        continue;
-
-                    if (this.IsWithinDrawingBounds(screenPos, aimviewBounds))
-                        this.DrawAimviewTransit(canvas, transit, screenPos, Vector3.Distance(myPosition, transit.Position), transitSettings);
-                }
+                esp.DrawTransits(canvas, this.Transits, myPosition, transitSettings);
             }
-        }
-
-        private void DrawLootableObject(SKCanvas canvas, LootableObject lootObject, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            switch (lootObject)
-            {
-                case LootItem item:
-                    this.DrawAimviewLootItem(canvas, item, screenPos, distance, objectSettings);
-                    break;
-                case LootContainer container:
-                    this.DrawAimviewLootContainer(canvas, container, screenPos, distance, objectSettings);
-                    break;
-                case LootCorpse corpse:
-                    this.DrawAimviewLootCorpse(canvas, corpse, screenPos, distance, objectSettings);
-                    break;
-            }
-        }
-
-        private void DrawAimviewLootItem(SKCanvas canvas, LootItem item, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            var currentY = screenPos.Y;
-
-            if (distance < objectSettings.PaintDistance)
-            {
-                var objectSize = this.CalculateObjectSize(distance);
-                var itemPaint = item.GetAimviewPaint();
-                canvas.DrawCircle(screenPos.X, currentY, objectSize, itemPaint);
-                currentY += (objectSize + AIMVIEW_OBJECT_SPACING) * this.uiScale;
-            }
-
-            if (distance < objectSettings.TextDistance)
-            {
-                var textPaint = item.GetAimviewTextPaint();
-                textPaint.TextSize = this.CalculateFontSize(distance, true);
-                textPaint.TextAlign = SKTextAlign.Center;
-
-                if (objectSettings.Name)
-                {
-                    canvas.DrawText(item.Item.shortName, screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Value)
-                {
-                    var itemValue = TarkovDevManager.GetItemValue(item.Item);
-                    canvas.DrawText($"{itemValue:N0}₽", screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Distance)
-                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY + textPaint.TextSize, textPaint);
-            }
-        }
-
-        private void DrawAimviewLootContainer(SKCanvas canvas, LootContainer container, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            var currentY = screenPos.Y;
-
-            if (distance < objectSettings.PaintDistance)
-            {
-                var objectSize = this.CalculateObjectSize(distance);
-                var containerPaint = container.GetAimviewPaint();
-                canvas.DrawCircle(screenPos.X, currentY, objectSize, containerPaint);
-                currentY += (objectSize + AIMVIEW_OBJECT_SPACING) * this.uiScale;
-            }
-
-            if (distance < objectSettings.TextDistance)
-            {
-                var textPaint = container.GetAimviewTextPaint();
-                textPaint.TextSize = this.CalculateFontSize(distance, true);
-                textPaint.TextAlign = SKTextAlign.Center;
-
-                if (objectSettings.Name)
-                {
-                    canvas.DrawText(container.Name, screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Value)
-                {
-                    canvas.DrawText($"{container.Value:N0}₽", screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Distance)
-                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY + textPaint.TextSize, textPaint);
-            }
-        }
-
-        private void DrawAimviewLootCorpse(SKCanvas canvas, LootCorpse corpse, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            var currentY = screenPos.Y;
-
-            if (distance < objectSettings.PaintDistance)
-            {
-                var objectSize = this.CalculateObjectSize(distance);
-                var corpsePaint = corpse.GetAimviewPaint();
-                canvas.DrawCircle(screenPos.X, currentY, objectSize, corpsePaint);
-                currentY += (objectSize + AIMVIEW_OBJECT_SPACING) * this.uiScale;
-            }
-
-            if (distance < objectSettings.TextDistance)
-            {
-                var textPaint = corpse.GetAimviewTextPaint();
-                textPaint.TextSize = this.CalculateFontSize(distance, true);
-                textPaint.TextAlign = SKTextAlign.Center;
-
-                if (objectSettings.Name)
-                {
-                    canvas.DrawText(corpse.Name, screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Value)
-                {
-                    canvas.DrawText($"{corpse.Value:N0}₽", screenPos.X, currentY + textPaint.TextSize, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Distance)
-                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
-            }
-        }
-
-        private void DrawAimviewTripwire(SKCanvas canvas, Tripwire tripwire, Vector2 fromScreenPos, Vector2 toScreenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            if (distance < objectSettings.PaintDistance)
-            {
-                var tripwirePaint = tripwire.GetAimviewPaint();
-                canvas.DrawLine(fromScreenPos.X, fromScreenPos.Y, toScreenPos.X, toScreenPos.Y, tripwirePaint);
-            }
-
-            if (distance < objectSettings.TextDistance)
-            {
-                var textPaint = tripwire.GetAimviewTextPaint();
-                textPaint.TextSize = this.CalculateFontSize(distance, true);
-                var currentY = fromScreenPos.Y;
-
-                if (objectSettings.Name)
-                {
-                    canvas.DrawText("Tripwire", fromScreenPos.X, currentY, textPaint);
-                    currentY += textPaint.TextSize * this.uiScale;
-                }
-
-                if (objectSettings.Distance)
-                    canvas.DrawText($"{distance:F0}m", fromScreenPos.X, currentY, textPaint);
-            }
-        }
-
-        private void DrawAimviewExfil(SKCanvas canvas, Exfil exfil, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            var objectSize = this.CalculateFontSize(distance);
-            var textPaint = exfil.GetAimviewTextPaint();
-            textPaint.TextSize = objectSize;
-
-            var currentY = screenPos.Y;
-
-            if (objectSettings.Name)
-            {
-                canvas.DrawText(exfil.Name, screenPos.X, currentY, textPaint);
-                currentY += objectSize * this.uiScale;
-            }
-
-            if (objectSettings.Distance)
-                canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
-        }
-
-        private void DrawAimviewTransit(SKCanvas canvas, Transit transit, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            var objectSize = this.CalculateFontSize(distance);
-            var textPaint = transit.GetAimviewTextPaint();
-            textPaint.TextSize = objectSize;
-
-            var currentY = screenPos.Y;
-
-            if (objectSettings.Name)
-            {
-                canvas.DrawText(transit.Name, screenPos.X, currentY, textPaint);
-                currentY += objectSize * this.uiScale;
-            }
-
-            if (objectSettings.Distance)
-                canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
-        }
-
-        private bool TryGetScreenPosition(Vector3 worldPosition, SKRect bounds, out Vector2 screenPosition)
-        {
-            screenPosition = Vector2.Zero;
-
-            try
-            {
-                // ViewMatrixとCameraManagerの完全性チェック
-                if (this.CameraManager == null || this.CameraManager.ViewMatrix == null || !Memory.Ready || !Memory.InGame)
-                {
-                    return false;
-                }
-
-                var isVisible = Extensions.WorldToScreen(worldPosition, (int)bounds.Width, (int)bounds.Height, out screenPosition);
-
-                if (isVisible)
-                {
-                    screenPosition.X += bounds.Left;
-                    screenPosition.Y += bounds.Top;
-                }
-
-                return isVisible;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private SKRect GetAimviewBounds()
-        {
-            return new SKRect(
-                0,
-                0,
-                this.ClientSize.Width,
-                this.ClientSize.Height
-            );
         }
 
         private void DrawCrosshair(SKCanvas canvas, SKRect drawingLocation)
@@ -682,24 +395,6 @@ namespace eft_dma_radar
             }
         }
 
-        private float CalculateObjectSize(float distance, bool isText = false)
-        {
-            var size = isText ? 12f : 3f;
-            return Math.Max(size * (1f - distance / 1000f) * this.uiScale, size * 0.3f * this.uiScale);
-        }
-
-        private float CalculateFontSize(float distance, bool small = false)
-        {
-            var baseSize = small ? 12f : 14f;
-            return Math.Max(baseSize * (1f - distance / 1000f) * this.uiScale, baseSize * 0.3f * this.uiScale);
-        }
-
-        private float CalculateDistanceBasedSize(float distance, float maxSize = 8.0f, float minSize = 1.0f, float decayFactor = 0.02f)
-        {
-            var scale = (float)Math.Exp(-decayFactor * distance);
-            return ((maxSize - minSize) * scale + minSize) * this.uiScale;
-        }
-
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
@@ -718,345 +413,6 @@ namespace eft_dma_radar
             // フォームの位置に合わせてAimViewの設定を更新
             this.config.AimviewSettings.X = this.Location.X;
             this.config.AimviewSettings.Y = this.Location.Y;
-        }
-
-        private bool IsWithinDrawingBounds(Vector2 pos, SKRect bounds)
-        {
-            return pos.X >= bounds.Left && pos.X <= bounds.Right &&
-                   pos.Y >= bounds.Top && pos.Y <= bounds.Bottom;
-        }
-
-        private void DrawAimviewPlayer(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
-        {
-            if (distance >= Math.Max(objectSettings.PaintDistance, objectSettings.TextDistance))
-                return;
-
-            // プレイヤータイプごとの設定を取得
-            var typeSettings = GetPlayerTypeSettings(player.Type);
-
-            // キャッシュされたペイントを使用
-            var paint = GetCachedPaint(player);
-            Vector2 textPosition = screenPos;
-            bool isWithinPaintDistance = distance < objectSettings.PaintDistance;
-            bool isWithinTextDistance = distance < objectSettings.TextDistance;
-
-            // 位置の更新が必要かチェック
-            bool shouldUpdate = ShouldUpdatePosition(player.ProfileID, distance);
-
-            // プレイヤーが自分を狙っているかチェックし、警告を表示
-            DrawTargetingWarning(canvas, player, distance, paint);
-
-            if (isWithinPaintDistance)
-            {
-                switch (typeSettings.ESPStyle)
-                {
-                    case ESPStyle.Skeleton:
-                        DrawPlayerSkeleton(canvas, player, this.GetAimviewBounds(), distance);
-                        break;
-                    case ESPStyle.Box:
-                        textPosition = DrawAimviewPlayerBox(canvas, player, distance, objectSettings, shouldUpdate);
-                        if (textPosition == Vector2.Zero)
-                            return;
-                        break;
-                    case ESPStyle.Dot:
-                        DrawAimviewPlayerDot(canvas, player, screenPos, distance, objectSettings, shouldUpdate);
-                        break;
-                }
-            }
-
-            if (isWithinTextDistance)
-            {
-                DrawPlayerTextInfo(canvas, player, distance, textPosition, objectSettings, typeSettings);
-            }
-
-            // 定期的なキャッシュのクリーンアップ
-            CleanupCaches();
-        }
-
-        /// <summary>
-        /// プレイヤーが自分を狙っているかチェックし、警告フレームを描画します
-        /// </summary>
-        private void DrawTargetingWarning(SKCanvas canvas, Player player, float distance, SKPaint basePaint)
-        {
-            var typeSettings = GetPlayerTypeSettings(player.Type);
-            if (this.LocalPlayer == null || !player.IsTargetingLocalPlayer || !typeSettings.ShowTargetedAlert)
-                return;
-
-            var bounds = this.GetAimviewBounds();
-            using var warningPaint = new SKPaint
-            {
-                Color = player.IsTargetingLocalPlayer ? basePaint.Color.WithAlpha(127) : SKColors.Transparent,
-                StrokeWidth = 10,
-                Style = SKPaintStyle.Stroke
-            };
-            canvas.DrawRect(bounds, warningPaint);
-        }
-
-        private void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings, PlayerTypeSettings typeSettings)
-        {
-            if (distance >= objectSettings.TextDistance)
-                return;
-
-            // プレイヤータイプの設定を取得（BEARとUSECの場合はPMCの設定を使用）
-            if (player.Type == PlayerType.BEAR || player.Type == PlayerType.USEC)
-            {
-                typeSettings = GetPlayerTypeSettings(PlayerType.PMC);
-            }
-
-            var textPaint = player.GetAimviewTextPaint();
-            textPaint.TextSize = this.CalculateFontSize(distance);
-            textPaint.TextAlign = SKTextAlign.Left;
-            var textX = screenPos.X + 20;
-            var currentY = screenPos.Y + 20;
-
-            // 名前の描画
-            if (typeSettings.ShowName && objectSettings.Name && !string.IsNullOrEmpty(player.Name))
-            {
-                // プレイヤー名を描画
-                canvas.DrawText(player.Name, textX, currentY, textPaint);
-                
-                // アンダーラインを描画（プレイヤー名の強調）
-                float textWidth = textPaint.MeasureText(player.Name);
-                using var underlinePaint = new SKPaint
-                {
-                    Color = textPaint.Color,
-                    StrokeWidth = 1,
-                    Style = SKPaintStyle.Stroke
-                };
-                canvas.DrawLine(textX, currentY + 2, textX + textWidth, currentY + 2, underlinePaint);
-                
-                currentY += textPaint.TextSize * this.uiScale;
-            }
-
-            // 武器情報の描画
-            if (typeSettings.ShowWeapon && 
-                player.ItemInHands.Item is not null && 
-                !string.IsNullOrEmpty(player.ItemInHands.Item.Short))
-            {
-                var weaponText = player.ItemInHands.Item.Short;
-                if (!string.IsNullOrEmpty(player.ItemInHands.Item.GearInfo.AmmoType))
-                {
-                    var ammoMsg = player.isOfflinePlayer ? $"/{player.ItemInHands.Item.GearInfo.AmmoCount}" : "";
-                    weaponText += $" ({player.ItemInHands.Item.GearInfo.AmmoType}{ammoMsg})";
-                }
-                
-                canvas.DrawText(weaponText, textX, currentY, textPaint);
-                currentY += textPaint.TextSize * this.uiScale;
-            }
-
-            // ヘルス情報の描画
-            if (typeSettings.ShowHealth && !string.IsNullOrEmpty(player.HealthStatus))
-            {
-                canvas.DrawText(player.HealthStatus, textX, currentY, textPaint);
-                currentY += textPaint.TextSize * this.uiScale;
-            }
-
-            // 距離情報の描画
-            if (typeSettings.ShowDistance && objectSettings.Distance)
-            {
-                canvas.DrawText($"{distance:F0}m", textX, currentY, textPaint);
-            }
-        }
-
-        private void DrawAimviewPlayerDot(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings, bool shouldUpdate)
-        {
-            if (distance >= objectSettings.PaintDistance)
-                return;
-
-            // プレイヤーの位置を骨盤の位置から取得
-            if (player?.Bones == null || !player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
-                return;
-
-            // 骨盤の位置を更新
-            pelvisBone.UpdatePosition();
-            var bounds = this.GetAimviewBounds();
-            
-            // 骨盤の位置をスクリーン座標に変換
-            if (!this.TryGetScreenPosition(pelvisBone.Position, bounds, out Vector2 pelvisScreenPos))
-                return;
-
-                var paint = player.GetAimviewPaint();
-                paint.Style = SKPaintStyle.Fill;
-                
-                var dotSize = CalculateDistanceBasedSize(distance);
-                canvas.DrawCircle(pelvisScreenPos.X, pelvisScreenPos.Y, dotSize, paint);
-            }
-
-        private Vector2 DrawAimviewPlayerBox(SKCanvas canvas, Player player, float distance, AimviewObjectSettings objectSettings, bool shouldUpdate)
-        {
-            if (player?.Bones == null || distance >= objectSettings.PaintDistance)
-                return Vector2.Zero;
-
-            // 頭とベースのボーンの位置を取得
-            if (!player.Bones.TryGetValue(PlayerBones.HumanHead, out var headBone) ||
-                !player.Bones.TryGetValue(PlayerBones.HumanBase, out var baseBone))
-                return Vector2.Zero;
-
-            // ボーンの位置を更新
-            headBone.UpdatePosition();
-            baseBone.UpdatePosition();
-
-            var bounds = this.GetAimviewBounds();
-            if (!TryGetScreenPosition(headBone.Position, bounds, out Vector2 headScreenPos) ||
-                !TryGetScreenPosition(baseBone.Position, bounds, out Vector2 baseScreenPos))
-                return Vector2.Zero;
-
-            // ボックスのサイズを計算（距離に応じて調整）
-            float height = baseScreenPos.Y - headScreenPos.Y;
-            float width = height * 0.4f;
-
-            using var paint = player.GetAimviewPaint();
-            paint.Style = SKPaintStyle.Stroke;
-            paint.StrokeWidth = Math.Max(1f, 2f * (1f - distance / objectSettings.PaintDistance));
-
-            var boxRect = SKRect.Create(
-                headScreenPos.X - width / 2,
-                headScreenPos.Y,
-                width,
-                height
-            );
-
-            canvas.DrawRect(boxRect, paint);
-
-            return baseScreenPos;
-        }
-
-        private void DrawPlayerSkeleton(SKCanvas canvas, Player player, SKRect bounds, float distance)
-        {
-            if (player?.Bones == null || player.Bones.Count == 0)
-                return;
-
-            var bonePositions = new List<Vector3>();
-            var screenPositions = new List<Vector2>();
-            var boneMapping = new Dictionary<int, PlayerBones>();
-            int index = 0;
-
-            // 距離に応じて処理するボーンを選択（パフォーマンスモードが有効な場合）
-            var bonesToProcess = this.config.AimviewSettings.usePerformanceSkeleton ? 
-                GetDistanceBasedBones(distance) : 
-                player.Bones.Keys.ToArray();
-
-            // 選択されたボーンの位置を収集
-            foreach (var boneType in bonesToProcess)
-            {
-                if (player.Bones.TryGetValue(boneType, out var bone))
-                {
-                    bone.UpdatePosition();
-                    bonePositions.Add(bone.Position);
-                    boneMapping[index] = boneType;
-                    index++;
-                }
-            }
-
-            // 一括でスクリーン座標に変換
-            var visibilityResults = Extensions.WorldToScreenCombined(bonePositions, bounds.Width, bounds.Height, screenPositions);
-
-            // 可視ボーンのマッピングを作成
-            var visibleBones = new Dictionary<PlayerBones, Vector2>();
-            for (int i = 0; i < bonePositions.Count; i++)
-            {
-                if (visibilityResults[i])
-                {
-                    var screenPos = screenPositions[i];
-                    screenPos.X += bounds.Left;
-                    screenPos.Y += bounds.Top;
-                    
-                    if (IsWithinDrawingBounds(screenPos, bounds))
-                    {
-                        visibleBones[boneMapping[i]] = screenPos;
-                    }
-                }
-            }
-
-            // ボーンの接続を描画
-            var paint = player.GetAimviewPaint();
-            paint.Style = SKPaintStyle.Stroke;
-            paint.StrokeWidth = 2.0f;
-
-            if (visibleBones.Count >= 2)
-            {
-                if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
-                {
-                    // パフォーマンスモード無効時または閾値以下：フルスケルトン
-                    DrawFullSkeleton(canvas, visibleBones, paint);
-                    
-                    // 頭部インジケーターを表示
-                    if (visibleBones.TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
-                    {
-                        paint.Style = SKPaintStyle.Stroke;
-                        float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
-                        canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
-                    }
-                }
-            }
-
-            // パフォーマンスモード有効時の遠距離：骨盤位置にドットを表示
-            if (this.config.AimviewSettings.usePerformanceSkeleton && distance > this.config.AimviewSettings.performanceSkeletonDistance && 
-                visibleBones.TryGetValue(PlayerBones.HumanPelvis, out Vector2 pelvisPos))
-            {
-                paint.Style = SKPaintStyle.Fill;
-                float dotSize = CalculateDistanceBasedSize(distance, 6.0f, 2.0f, 0.02f);
-                canvas.DrawCircle(pelvisPos.X, pelvisPos.Y, dotSize, paint);
-            }
-        }
-
-        private PlayerBones[] GetDistanceBasedBones(float distance)
-        {
-            if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
-            {
-                // パフォーマンスモード無効時または閾値以下：フルスケルトン
-                return new[]
-                {
-                    PlayerBones.HumanHead,
-                    PlayerBones.HumanSpine3,
-                    PlayerBones.HumanPelvis,
-                    PlayerBones.HumanLForearm1,
-                    PlayerBones.HumanLPalm,
-                    PlayerBones.HumanRForearm1,
-                    PlayerBones.HumanRPalm,
-                    PlayerBones.HumanLCalf,
-                    PlayerBones.HumanLFoot,
-                    PlayerBones.HumanRCalf,
-                    PlayerBones.HumanRFoot
-                };
-            }
-            else
-            {
-                // 遠距離：骨盤位置のみ
-                return new[]
-                {
-                    PlayerBones.HumanPelvis
-                };
-            }
-        }
-
-        private void DrawFullSkeleton(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, SKPaint paint)
-        {
-            // メインボディ
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanHead, PlayerBones.HumanSpine3, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanPelvis, paint);
-
-            // 腕
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm, paint);
-
-            // 脚
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanLCalf, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLCalf, PlayerBones.HumanLFoot, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanRCalf, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRCalf, PlayerBones.HumanRFoot, paint);
-        }
-
-        private void DrawBoneConnectionIfVisible(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, 
-            PlayerBones bone1, PlayerBones bone2, SKPaint paint)
-        {
-            if (visibleBones.TryGetValue(bone1, out Vector2 start) && 
-                visibleBones.TryGetValue(bone2, out Vector2 end))
-            {
-                canvas.DrawLine(start.X, start.Y, end.X, end.Y, paint);
-            }
         }
 
         private void BtnToggleMaximize_Click(object sender, EventArgs e)
@@ -1140,200 +496,79 @@ namespace eft_dma_radar
             };
         }
 
-        private SKPaint GetCachedPaint(Player player)
-        {
-            var paint = _paintCache.GetOrAdd(player.ProfileID, _ => 
-            {
-                var newPaint = GetPaintFromPool("default");
-                CopyPaintProperties(player.GetAimviewPaint(), newPaint);
-                return newPaint;
-            });
-
-            return paint;
-        }
-
-        private void CopyPaintProperties(SKPaint source, SKPaint target)
-        {
-            if (source == null || target == null)
-                return;
-
-            target.Color = source.Color;
-            target.Style = source.Style;
-            target.StrokeWidth = source.StrokeWidth;
-            target.StrokeCap = source.StrokeCap;
-            target.StrokeJoin = source.StrokeJoin;
-            target.TextAlign = source.TextAlign;
-            target.TextSize = source.TextSize;
-            target.TextEncoding = source.TextEncoding;
-            target.FilterQuality = source.FilterQuality;
-            target.IsAntialias = source.IsAntialias;
-            target.IsDither = source.IsDither;
-        }
-
         private bool ShouldUpdatePosition(string playerId, float distance)
         {
-            var now = DateTime.Now;
-            if (!_lastUpdateTime.TryGetValue(playerId, out var lastUpdate))
-            {
-                _lastUpdateTime[playerId] = now;
-                return true;
-            }
-
-            // 距離に関係なく33ms（約30fps）に固定
-            var updateInterval = TimeSpan.FromMilliseconds(33);
-
-            if (now - lastUpdate >= updateInterval)
-            {
-                _lastUpdateTime[playerId] = now;
-                return true;
-            }
-
-            return false;
+            // 常に更新を許可
+            return true;
         }
 
         private void CleanupCaches()
         {
-            var now = DateTime.Now;
-            if (now - _lastCleanupTime < TimeSpan.FromMilliseconds(CLEANUP_INTERVAL_MS))
-                return;
-
-            _lastCleanupTime = now;
-            var expiredTime = TimeSpan.FromSeconds(5);
-
-            // 期限切れのアイテムを一括で特定
-            var expiredItems = _lastUpdateTime
-                .Where(x => now - x.Value > expiredTime)
-                .Select(x => x.Key)
-                .ToList();
-
-            foreach (var key in expiredItems)
-            {
-                if (_paintCache.TryRemove(key, out var paint))
-                {
-                    ReturnPaintToPool("default", paint);
-                }
-                _lastUpdateTime.TryRemove(key, out _);
-                _lastPositions.TryRemove(key, out _);
-            }
-
-            // メモリ使用量の監視
-            MonitorMemoryUsage();
+            // キャッシュクリーンアップは不要になったため、空のメソッドとして残す
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            
-            // すべてのキャッシュをクリア
-            foreach (var paint in _paintCache.Values)
-            {
-                paint.Dispose();
-            }
-            _paintCache.Clear();
-            _lastUpdateTime.Clear();
-            _lastPositions.Clear();
+        }
 
-            // プールされたオブジェクトをクリア
-            foreach (var queue in _paintPool.Values)
+        private PlayerTypeSettings GetPlayerTypeSettings(PlayerType type)
+        {
+            // BEARとUSECの場合はPMCの設定を使用
+            if (type == PlayerType.BEAR || type == PlayerType.USEC)
             {
-                while (queue.Count > 0)
+                type = PlayerType.PMC;
+            }
+
+            // 設定が存在しない場合は新しい設定を作成
+            if (!this.config.AimviewSettings.PlayerTypeSettings.TryGetValue(type, out var settings))
+            {
+                settings = new PlayerTypeSettings
                 {
-                    queue.Dequeue().Dispose();
-                }
+                    ShowName = true,
+                    ShowDistance = true,
+                    ShowWeapon = true,
+                    ShowHealth = true,
+                    ShowTargetedAlert = true,
+                    ESPStyle = ESPStyle.Skeleton
+                };
+                this.config.AimviewSettings.PlayerTypeSettings[type] = settings;
             }
-            foreach (var queue in _pathPool.Values)
-            {
-                while (queue.Count > 0)
-                {
-                    queue.Dequeue().Dispose();
-                }
-            }
-            _paintPool.Clear();
-            _pathPool.Clear();
+            return settings;
         }
 
-        // オブジェクトプーリング用のメソッド
-        private SKPaint GetPaintFromPool(string key)
+        private string GetESPButtonText(ESPStyle style)
         {
-            if (!_paintPool.TryGetValue(key, out var queue))
+            return style switch
             {
-                queue = new Queue<SKPaint>();
-                _paintPool[key] = queue;
-            }
-
-            if (queue.Count > 0)
-                return queue.Dequeue();
-
-            return new SKPaint();
+                ESPStyle.Skeleton => "SK",
+                ESPStyle.Box => "Box",
+                ESPStyle.Dot => "Dot",
+                _ => "SK"
+            };
         }
 
-        private void ReturnPaintToPool(string key, SKPaint paint)
+        private Color GetESPButtonColor(ESPStyle style)
         {
-            if (!_paintPool.TryGetValue(key, out var queue))
+            return style switch
             {
-                queue = new Queue<SKPaint>();
-                _paintPool[key] = queue;
-            }
-
-            if (queue.Count < POOL_SIZE)
-            {
-                paint.Reset();
-                queue.Enqueue(paint);
-            }
-            else
-            {
-                paint.Dispose();
-            }
+                ESPStyle.Skeleton => Color.LimeGreen,
+                ESPStyle.Box => Color.Yellow,
+                ESPStyle.Dot => Color.Red,
+                _ => Color.Red
+            };
         }
 
-        private SKPath GetPathFromPool(string key)
+        private Color GetESPButtonColor()
         {
-            if (!_pathPool.TryGetValue(key, out var queue))
-            {
-                queue = new Queue<SKPath>();
-                _pathPool[key] = queue;
-            }
-
-            if (queue.Count > 0)
-                return queue.Dequeue();
-
-            return new SKPath();
+            var settings = GetPlayerTypeSettings(_currentPlayerType);
+            return GetESPButtonColor(settings.ESPStyle);
         }
 
-        private void ReturnPathToPool(string key, SKPath path)
+        private string GetESPButtonText()
         {
-            if (!_pathPool.TryGetValue(key, out var queue))
-            {
-                queue = new Queue<SKPath>();
-                _pathPool[key] = queue;
-            }
-
-            if (queue.Count < POOL_SIZE)
-            {
-                path.Reset();
-                queue.Enqueue(path);
-            }
-            else
-            {
-                path.Dispose();
-            }
-        }
-
-        // メモリ使用量の監視と制御
-        private void MonitorMemoryUsage()
-        {
-            if (_paintCache.Count > MAX_CACHED_OBJECTS)
-            {
-                var itemsToRemove = _paintCache.Count - MAX_CACHED_OBJECTS;
-                var oldestItems = _lastUpdateTime.OrderBy(x => x.Value).Take(itemsToRemove);
-                
-                foreach (var item in oldestItems)
-                {
-                    _paintCache.TryRemove(item.Key, out var paint);
-                    _lastUpdateTime.TryRemove(item.Key, out _);
-                    _lastPositions.TryRemove(item.Key, out _);
-                }
-            }
+            var settings = GetPlayerTypeSettings(_currentPlayerType);
+            return GetESPButtonText(settings.ESPStyle);
         }
 
         private void InitializePlayerTypeControls()
@@ -1663,65 +898,6 @@ namespace eft_dma_radar
                 }
             }
             this.aimViewCanvas.Invalidate();
-        }
-
-        private PlayerTypeSettings GetPlayerTypeSettings(PlayerType type)
-        {
-            // BEARとUSECの場合はPMCの設定を使用
-            if (type == PlayerType.BEAR || type == PlayerType.USEC)
-            {
-                type = PlayerType.PMC;
-            }
-
-            // 設定が存在しない場合は新しい設定を作成
-            if (!this.config.AimviewSettings.PlayerTypeSettings.TryGetValue(type, out var settings))
-            {
-                settings = new PlayerTypeSettings
-                {
-                    ShowName = true,
-                    ShowDistance = true,
-                    ShowWeapon = true,
-                    ShowHealth = true,
-                    ShowTargetedAlert = true,
-                    ESPStyle = ESPStyle.Skeleton
-                };
-                this.config.AimviewSettings.PlayerTypeSettings[type] = settings;
-            }
-            return settings;
-        }
-
-        private string GetESPButtonText(ESPStyle style)
-        {
-            return style switch
-            {
-                ESPStyle.Skeleton => "SK",
-                ESPStyle.Box => "Box",
-                ESPStyle.Dot => "Dot",
-                _ => "SK"
-            };
-        }
-
-        private Color GetESPButtonColor(ESPStyle style)
-        {
-            return style switch
-            {
-                ESPStyle.Skeleton => Color.LimeGreen,
-                ESPStyle.Box => Color.Yellow,
-                ESPStyle.Dot => Color.Red,
-                _ => Color.Red
-            };
-        }
-
-        private Color GetESPButtonColor()
-        {
-            var settings = GetPlayerTypeSettings(_currentPlayerType);
-            return GetESPButtonColor(settings.ESPStyle);
-        }
-
-        private string GetESPButtonText()
-        {
-            var settings = GetPlayerTypeSettings(_currentPlayerType);
-            return GetESPButtonText(settings.ESPStyle);
         }
     }
 } 
