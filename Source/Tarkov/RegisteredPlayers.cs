@@ -397,7 +397,7 @@ namespace eft_dma_radar
                                 }
 
                                 player.IsAlive = false;
-                                Program.Log($"{player.Name} died");
+                                Program.Log($"{player.Name} died => {player.Position}");
                             }
                         }
 
@@ -416,7 +416,7 @@ namespace eft_dma_radar
                         if (checkBones && player.IsActive && player.IsAlive)
                             if (player.Bones.TryGetValue(PlayerBones.HumanHead, out var bone))
                             {
-                                if (!bone.UpdatePosition()) // update head only
+                                if (!bone.UpdatePosition() && bone.InvalidBonePtr) // update head only
                                     player.RefreshBoneTransforms();
                             }
 

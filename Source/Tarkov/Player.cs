@@ -1,6 +1,8 @@
-﻿using System.Collections.Concurrent;
+﻿using eft_dma_radar.Source.Tarkov;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
+using System.Text.RegularExpressions;
 
 namespace eft_dma_radar
 {
@@ -37,15 +39,19 @@ namespace eft_dma_radar
         /// <summary>
         /// Player name.
         /// </summary>
-        public string Name { get; set; }
+        public string Name { get; set; } = "";
         /// <summary>
         /// Player Level (Based on experience).
         /// </summary>
-        public int Lvl { get; } = 0;
+        public int Level { get; private set; } = 0;
         /// <summary>
         /// Player's Kill/Death Average
         /// </summary>
         public float KDA { get; private set; } = -1f;
+        /// <summary>
+        /// Player's total hours
+        /// </summary>
+        public float Hours { get; private set; } = -1f;
         /// <summary>
         /// Group that the player belongs to.
         /// </summary>
@@ -451,8 +457,10 @@ namespace eft_dma_radar
         /// <summary>
         /// Returns PlayerType based on isAI & playuerSide
         /// </summary>
-        private PlayerType GetOnlinePlayerType(bool isAI)
+        private PlayerType GetOnlinePlayerType()
         {
+            var isAI = this.AccountID == "0";
+
             if (!isAI)
             {
                 return this.PlayerSide switch
@@ -464,28 +472,25 @@ namespace eft_dma_radar
             }
             else
             {
-                if (this.Name.Contains("(BTR)"))
-                {
-                    return PlayerType.Boss;
-                }
-                else
-                {
-                    var inFaction = Program.AIFactionManager.IsInFaction(this.Name, out var playerType);
+                if (string.IsNullOrEmpty(this.Name))
+                    return PlayerType.Scav;
 
-                    if (!inFaction && Memory.IsPvEMode)
-                    {
-                        var dogtagSlot = this.Gear.FirstOrDefault(x => x.Slot.Key == "Dogtag");
-
-                        if (dogtagSlot.Item is not null)
-                            playerType = (dogtagSlot.Item.Short == "BEAR" ? PlayerType.BEAR : PlayerType.USEC);
-                    }
-                    else if (!inFaction && this.Name.Equals("???", StringComparison.OrdinalIgnoreCase))
-                    {
-                        playerType = PlayerType.Zombie;
-                    }
-
+                var inFaction = Program.AIFactionManager.IsInFaction(this.Name, out var playerType);
                     return playerType;
+
+                if (!inFaction && Memory.IsPvEMode)
+                {
+                    var dogtagSlot = this.Gear.FirstOrDefault(x => x.Slot.Key == "Dogtag");
+
+                    if (dogtagSlot.Item is not null)
+                        playerType = (dogtagSlot.Item.Short == "BEAR" ? PlayerType.BEAR : PlayerType.USEC);
                 }
+                else if (!inFaction && this.Name.Equals("???", StringComparison.OrdinalIgnoreCase))
+                {
+                    playerType = PlayerType.Zombie;
+                }
+
+                return playerType;
             }
         }
 
@@ -529,63 +534,53 @@ namespace eft_dma_radar
             var round5 = scatterReadMap.AddRound();
             var round6 = scatterReadMap.AddRound();
 
-            var transIntPtr1 = round1.AddEntry<ulong>(0, 0, this.Base, null, Offsets.Player.To_TransformInternal[0]);
-            var info = round1.AddEntry<ulong>(0, 1, this.Profile, null, Offsets.Profile.PlayerInfo);
-            var inventoryController = round1.AddEntry<ulong>(0, 2, this.Base, null, Offsets.Player.InventoryController);
-            var playerBody = round1.AddEntry<ulong>(0, 3, this.Base, null, Offsets.Player.PlayerBody);
-            var movementContext = round1.AddEntry<ulong>(0, 4, this.Base, null, Offsets.Player.MovementContext);
-            var healthController = round1.AddEntry<ulong>(0, 5, this.Base, null, Offsets.Player.HealthController);
+            var info = round1.AddEntry<ulong>(0, 0, this.Profile, null, Offsets.Profile.PlayerInfo);
+            var inventoryController = round1.AddEntry<ulong>(0, 1, this.Base, null, Offsets.Player.InventoryController);
+            var playerBody = round1.AddEntry<ulong>(0, 2, this.Base, null, Offsets.Player.PlayerBody);
+            var movementContext = round1.AddEntry<ulong>(0, 3, this.Base, null, Offsets.Player.MovementContext);
+            var healthController = round1.AddEntry<ulong>(0, 4, this.Base, null, Offsets.Player.HealthController);
 
-            var transIntPtr2 = round2.AddEntry<ulong>(0, 6, transIntPtr1, null, Offsets.Player.To_TransformInternal[1]);
-            // var name = round2.AddEntry<ulong>(0, 7, info, null, Offsets.PlayerInfo.Nickname);
-            var inventory = round2.AddEntry<ulong>(0, 8, inventoryController, null, Offsets.InventoryController.Inventory);
-            var registrationDate = round2.AddEntry<int>(0, 9, info, null, Offsets.PlayerInfo.RegistrationDate);
-            var groupID = round2.AddEntry<ulong>(0, 10, info, null, Offsets.PlayerInfo.GroupId);
-            var botSettings = round2.AddEntry<ulong>(0, 11, info, null, Offsets.PlayerInfo.Settings);
+            var name = round2.AddEntry<ulong>(0, 5, info, null, Offsets.PlayerInfo.Nickname);
+            var inventory = round2.AddEntry<ulong>(0, 6, inventoryController, null, Offsets.InventoryController.Inventory);
+            var registrationDate = round2.AddEntry<int>(0, 7, info, null, Offsets.PlayerInfo.RegistrationDate);
+            var groupID = round2.AddEntry<ulong>(0, 8, info, null, Offsets.PlayerInfo.GroupId);
+            var botSettings = round2.AddEntry<ulong>(0, 9, info, null, Offsets.PlayerInfo.Settings);
 
-            var transIntPtr3 = round3.AddEntry<ulong>(0, 12, transIntPtr2, null, Offsets.Player.To_TransformInternal[2]);
-            var equipment = round3.AddEntry<ulong>(0, 13, inventory, null, Offsets.Inventory.Equipment);
-            var role = round3.AddEntry<int>(0, 14, botSettings, null, Offsets.PlayerSettings.Role);
+            var equipment = round3.AddEntry<ulong>(0, 10, inventory, null, Offsets.Inventory.Equipment);
+            var role = round3.AddEntry<int>(0, 11, botSettings, null, Offsets.PlayerSettings.Role);
 
-            var transIntPtr4 = round4.AddEntry<ulong>(0, 15, transIntPtr3, null, Offsets.Player.To_TransformInternal[3]);
-            var inventorySlots = round4.AddEntry<ulong>(0, 16, equipment, null, Offsets.Equipment.Slots);
-
-            var transIntPtr5 = round5.AddEntry<ulong>(0, 17, transIntPtr4, null, Offsets.Player.To_TransformInternal[4]);
-
-            var transformInternal = round6.AddEntry<ulong>(0, 18, transIntPtr5, null, Offsets.Player.To_TransformInternal[5]);
+            var inventorySlots = round4.AddEntry<ulong>(0, 12, equipment, null, Offsets.Equipment.Slots);
 
             scatterReadMap.Execute();
         }
 
         private void ProcessOfflinePlayerScatterReadResults(ScatterReadMap scatterReadMap)
         {
-            if (!scatterReadMap.Results[0][1].TryGetResult<ulong>(out var info))
+            if (!scatterReadMap.Results[0][0].TryGetResult<ulong>(out var info))
                 return;
-            if (!scatterReadMap.Results[0][4].TryGetResult<ulong>(out var movementContext))
+            if (!scatterReadMap.Results[0][1].TryGetResult<ulong>(out var inventoryController))
                 return;
-            if (!scatterReadMap.Results[0][5].TryGetResult<ulong>(out var healthController))
+            if (!scatterReadMap.Results[0][2].TryGetResult<ulong>(out var playerBody))
                 return;
-            if (!scatterReadMap.Results[0][2].TryGetResult<ulong>(out var inventoryController))
+            if (!scatterReadMap.Results[0][3].TryGetResult<ulong>(out var movementContext))
                 return;
-            if (!scatterReadMap.Results[0][3].TryGetResult<ulong>(out var playerBody))
+            if (!scatterReadMap.Results[0][4].TryGetResult<ulong>(out var healthController))
                 return;
-            //if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var name))
-                //return;
-            if (!scatterReadMap.Results[0][16].TryGetResult<ulong>(out var inventorySlots))
+            if (!scatterReadMap.Results[0][5].TryGetResult<ulong>(out var name))
                 return;
-            if (!scatterReadMap.Results[0][18].TryGetResult<ulong>(out var transformInternal))
+            if (!scatterReadMap.Results[0][8].TryGetResult<ulong>(out var groupID))
                 return;
-            if (!scatterReadMap.Results[0][10].TryGetResult<ulong>(out var groupID))
+            if (!scatterReadMap.Results[0][11].TryGetResult<int>(out var role))
                 return;
-            if (!scatterReadMap.Results[0][14].TryGetResult<int>(out var role))
+            if (!scatterReadMap.Results[0][12].TryGetResult<ulong>(out var inventorySlots))
                 return;
 
             this.Info = info;
             this.PlayerRole = role;
             this.HealthController = healthController;
-            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, "1", groupID);
+            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, playerBody, name, groupID);
 
-            if (scatterReadMap.Results[0][9].TryGetResult<int>(out var registrationDate))
+            if (scatterReadMap.Results[0][7].TryGetResult<int>(out var registrationDate))
             {
                 var isAI = registrationDate == 0;
 
@@ -608,83 +603,112 @@ namespace eft_dma_radar
             var round6 = scatterReadMap.AddRound();
 
             var movementContextPtr1 = round1.AddEntry<ulong>(0, 0, this.Info, null, Offsets.ObservedPlayerView.To_MovementContext[0]);
-            var transIntPtr1 = round1.AddEntry<ulong>(0, 1, this.Info, null, Offsets.ObservedPlayerView.To_TransformInternal[0]);
-            var inventoryControllerPtr1 = round1.AddEntry<ulong>(0, 2, this.Info, null, Offsets.ObservedPlayerView.To_InventoryController[0]);
-            var healthControllerPtr1 = round1.AddEntry<ulong>(0, 3, this.Info, null, Offsets.ObservedPlayerView.To_HealthController[0]);
-            //var name = round1.AddEntry<ulong>(0, 4, this.Info, null, Offsets.ObservedPlayerView.NickName);
-            var accountID = round1.AddEntry<ulong>(0, 5, this.Info, null, Offsets.ObservedPlayerView.AccountID);
-            var playerSide = round1.AddEntry<int>(0, 6, this.Info, null, Offsets.ObservedPlayerView.PlayerSide);
-            var groupID = round1.AddEntry<ulong>(0, 7, this.Info, null, Offsets.ObservedPlayerView.GroupID);
-            var playerBody = round1.AddEntry<ulong>(0, 8, this.Info, null, Offsets.ObservedPlayerView.PlayerBody);
-            var memberCategory = round1.AddEntry<int>(0, 9, this.Info, null, Offsets.PlayerInfo.MemberCategory);
+            var inventoryControllerPtr1 = round1.AddEntry<ulong>(0, 1, this.Info, null, Offsets.ObservedPlayerView.To_InventoryController[0]);
+            var healthControllerPtr1 = round1.AddEntry<ulong>(0, 2, this.Info, null, Offsets.ObservedPlayerView.To_HealthController[0]);
+            var accountID = round1.AddEntry<ulong>(0, 3, this.Info, null, Offsets.ObservedPlayerView.AccountID);
+            var playerSide = round1.AddEntry<int>(0, 4, this.Info, null, Offsets.ObservedPlayerView.PlayerSide);
+            var groupID = round1.AddEntry<ulong>(0, 5, this.Info, null, Offsets.ObservedPlayerView.GroupID);
+            var playerBody = round1.AddEntry<ulong>(0, 6, this.Info, null, Offsets.ObservedPlayerView.PlayerBody);
+            var memberCategory = round1.AddEntry<int>(0, 7, this.Info, null, Offsets.PlayerInfo.MemberCategory);
+            var voiceStr = round1.AddEntry<ulong>(0, 8, this.Info, null, Offsets.ObservedPlayerView.VoiceName);
 
-            var movementContextPtr2 = round2.AddEntry<ulong>(0, 10, movementContextPtr1, null, Offsets.ObservedPlayerView.To_MovementContext[1]);
-            var transIntPtr2 = round2.AddEntry<ulong>(0, 11, transIntPtr1, null, Offsets.ObservedPlayerView.To_TransformInternal[1]);
-            var inventoryController = round2.AddEntry<ulong>(0, 12, inventoryControllerPtr1, null, Offsets.ObservedPlayerView.To_InventoryController[1]);
-            var healthController = round2.AddEntry<ulong>(0, 13, healthControllerPtr1, null, Offsets.ObservedPlayerView.To_HealthController[1]);
+            var movementContextPtr2 = round2.AddEntry<ulong>(0, 9, movementContextPtr1, null, Offsets.ObservedPlayerView.To_MovementContext[1]);
+            var inventoryController = round2.AddEntry<ulong>(0, 10, inventoryControllerPtr1, null, Offsets.ObservedPlayerView.To_InventoryController[1]);
+            var healthController = round2.AddEntry<ulong>(0, 11, healthControllerPtr1, null, Offsets.ObservedPlayerView.To_HealthController[1]);
 
-            var movementContext = round3.AddEntry<ulong>(0, 14, movementContextPtr2, null, Offsets.ObservedPlayerView.To_MovementContext[2]);
-            var transIntPtr3 = round3.AddEntry<ulong>(0, 15, transIntPtr2, null, Offsets.ObservedPlayerView.To_TransformInternal[2]);
-            var inventory = round3.AddEntry<ulong>(0, 16, inventoryController, null, Offsets.InventoryController.Inventory);
+            var movementContext = round3.AddEntry<ulong>(0, 12, movementContextPtr2, null, Offsets.ObservedPlayerView.To_MovementContext[2]);
+            var inventory = round3.AddEntry<ulong>(0, 13, inventoryController, null, Offsets.InventoryController.Inventory);
 
-            var transIntPtr4 = round4.AddEntry<ulong>(0, 17, transIntPtr3, null, Offsets.ObservedPlayerView.To_TransformInternal[3]);
-            var equipment = round4.AddEntry<ulong>(0, 18, inventory, null, Offsets.Inventory.Equipment);
+            var equipment = round4.AddEntry<ulong>(0, 14, inventory, null, Offsets.Inventory.Equipment);
 
-            var transIntPtr5 = round5.AddEntry<ulong>(0, 19, transIntPtr4, null, Offsets.ObservedPlayerView.To_TransformInternal[4]);
-            var inventorySlots = round5.AddEntry<ulong>(0, 20, equipment, null, Offsets.Equipment.Slots);
-
-            var transformInternal = round6.AddEntry<ulong>(0, 21, transIntPtr5, null, Offsets.ObservedPlayerView.To_TransformInternal[5]);
+            var inventorySlots = round5.AddEntry<ulong>(0, 15, equipment, null, Offsets.Equipment.Slots);
 
             scatterReadMap.Execute();
         }
 
         private void ProcessOnlinePlayerScatterReadResults(ScatterReadMap scatterReadMap)
         {
-            if (!scatterReadMap.Results[0][14].TryGetResult<ulong>(out var movementContext))
+            if (!scatterReadMap.Results[0][3].TryGetResult<ulong>(out var accountID))
                 return;
-            if (!scatterReadMap.Results[0][12].TryGetResult<ulong>(out var inventoryController))
+            if (!scatterReadMap.Results[0][4].TryGetResult<int>(out var playerSide))
                 return;
-            if (!scatterReadMap.Results[0][20].TryGetResult<ulong>(out var inventorySlots))
+            if (!scatterReadMap.Results[0][5].TryGetResult<ulong>(out var groupID))
                 return;
-            if (!scatterReadMap.Results[0][21].TryGetResult<ulong>(out var transformInternal))
+            if (!scatterReadMap.Results[0][6].TryGetResult<ulong>(out var playerBody))
                 return;
-            if (!scatterReadMap.Results[0][13].TryGetResult<ulong>(out var healthController))
+            if (!scatterReadMap.Results[0][7].TryGetResult<int>(out var memberCategory))
                 return;
-            if (!scatterReadMap.Results[0][8].TryGetResult<ulong>(out var playerBody))
+            if (!scatterReadMap.Results[0][8].TryGetResult<ulong>(out var voiceName))
                 return;
-            if (!scatterReadMap.Results[0][6].TryGetResult<int>(out var playerSide))
+            if (!scatterReadMap.Results[0][10].TryGetResult<ulong>(out var inventoryController))
                 return;
-            if (!scatterReadMap.Results[0][5].TryGetResult<ulong>(out var accountID))
+            if (!scatterReadMap.Results[0][11].TryGetResult<ulong>(out var healthController))
                 return;
-            //if (!scatterReadMap.Results[0][4].TryGetResult<ulong>(out var name))
-                //return;
-            if (!scatterReadMap.Results[0][9].TryGetResult<int>(out var memberCategory))
+            if (!scatterReadMap.Results[0][12].TryGetResult<ulong>(out var movementContext))
                 return;
-            if (!scatterReadMap.Results[0][7].TryGetResult<ulong>(out var groupID))
+            if (!scatterReadMap.Results[0][15].TryGetResult<ulong>(out var inventorySlots))
                 return;
 
-            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, transformInternal, playerBody, "1", groupID, playerSide);
+            this.InitializePlayerProperties(movementContext, inventoryController, inventorySlots, playerBody, 0, groupID, playerSide);
 
             this.IsLocalPlayer = false;
             this.HealthController = healthController;
             this.AccountID = Memory.ReadUnityString(accountID);
 
-            this.Type = this.GetOnlinePlayerType(this.AccountID == "0");
+            this.Type = this.GetOnlinePlayerType();
             this.IsPMC = (this.Type == PlayerType.BEAR || this.Type == PlayerType.USEC);
 
-            this.FinishAlloc();
+            if (this.IsHuman)
+            {
+                this.Name = "Human";
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        var stats = await PlayerProfileAPI.GetPlayerStatsAsync(this.AccountID);
+                        this.Name = stats.Nickname;
+                        this.Level = stats.Level;
+                        this.KDA = stats.KDRatio;
+                        this.Hours = stats.HoursPlayed;
+                        Program.Log($"Updated Player stats for '{this.Name}'");
+                    }
+                    catch { }
+                    finally
+                    {
+                        this.FinishAlloc();
+                    }
+                });
+            }
+            else // npc
+            {
+                try
+                {
+                    this.Name = Memory.ReadUnityString(voiceName);
+                    this.CleanAIName();
+                }
+                catch
+                {
+                    this.Name = "AI";
+                }
+                
+                this.FinishAlloc();
+            }
         }
 
-        private void InitializePlayerProperties(ulong movementContext, ulong inventoryController, ulong inventorySlots, ulong transformInternal, ulong playerBody, string name, ulong groupID, int playerSide = 0)
+        private void InitializePlayerProperties(ulong movementContext, ulong inventoryController, ulong inventorySlots, ulong playerBody, ulong name, ulong groupID, int playerSide = 0)
         {
             this.MovementContext = movementContext;
             this.InventoryController = inventoryController;
             this.InventorySlots = inventorySlots;
             this._gearManager = new GearManager(this.InventorySlots);
             this.PlayerBody = playerBody;
-            this.Name = "Name";
-            //this.Name = Memory.ReadUnityString(name);
-            //this.Name = Helpers.TransliterateCyrillic(this.Name);
+
+            if (name > 0)
+            {
+                this.Name = Memory.ReadUnityString(name);
+                this.Name = Helpers.TransliterateCyrillic(this.Name);
+            }
+
             this.PlayerSide = playerSide;
 
             if (groupID != 0)
@@ -801,7 +825,7 @@ namespace eft_dma_radar
             else if (isSpecialPlayer && !isOnWatchlist)
             {
                 this.Tag = "";
-                this.Type = this.isOfflinePlayer ? this.GetOfflinePlayerType(false) : this.GetOnlinePlayerType(false);
+                this.Type = this.isOfflinePlayer ? this.GetOfflinePlayerType(false) : this.GetOnlinePlayerType();
             }
         }
 
@@ -811,6 +835,31 @@ namespace eft_dma_radar
         public static void Reset()
         {
             _groups.Clear();
+        }
+
+        public void CleanAIName()
+        {
+            var cleanName = Regex.Replace(this.Name, "^Boss[_]?", "", RegexOptions.IgnoreCase);
+            cleanName = cleanName.Replace("_", "");
+            cleanName = Regex.Replace(cleanName, @"\d", "");
+            switch (cleanName)
+            {
+                case "BigPipe": cleanName = "Big Pipe"; break;
+                case "BirdEye": cleanName = "Birdeye"; break;
+                case "Usec": cleanName = "Rogue"; break;
+                case "Bully": cleanName = "Reshala"; break;
+                case "Sturman": cleanName = "Shturman"; break;
+                case "Gluhar": cleanName = "Glukhar"; break;
+                case "SectantWarrior": cleanName = "Cultist"; break;
+                case "SectantPriest" when this.Gear.Any(g => g.Item.Short == "Zryachiy"):
+                    cleanName = "Zryachiy";
+                    break;
+                case "Scav" when this.Gear.Count == 1 && this.Gear.First().Item.Short == "AVS":
+                    cleanName = "BTR";
+                    break;
+            }
+            this.Name = cleanName;
+            this.Type = this.GetOnlinePlayerType();
         }
         #endregion
     }
