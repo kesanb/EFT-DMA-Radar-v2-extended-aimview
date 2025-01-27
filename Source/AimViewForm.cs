@@ -615,23 +615,26 @@ namespace eft_dma_radar
             var controls = new PlayerTypeControls();
             var settings = GetPlayerTypeSettings(type);
 
+            // ComboBoxの右側からボタンを配置
+            int startX = 215; // ComboBoxの位置(90) + サイズ(120) + 間隔(5)
+
             // ESPスタイルボタン
-            controls.ESPStyleButton = CreateButton(GetESPButtonText(settings.ESPStyle), new Point(5, 30), GetESPButtonColor(settings.ESPStyle), (s, e) => ToggleESPStyle(type));
+            controls.ESPStyleButton = CreateButton(GetESPButtonText(settings.ESPStyle), new Point(startX, 5), GetESPButtonColor(settings.ESPStyle), (s, e) => ToggleESPStyle(type));
 
             // 名前表示ボタン
-            controls.NameButton = CreateButton("N", new Point(40, 30), settings.ShowName ? Color.Green : Color.Red, (s, e) => ToggleName(type));
+            controls.NameButton = CreateButton("N", new Point(startX + 35, 5), settings.ShowName ? Color.Green : Color.Red, (s, e) => ToggleName(type));
 
             // 武器表示ボタン
-            controls.WeaponButton = CreateButton("W", new Point(75, 30), settings.ShowWeapon ? Color.Green : Color.Red, (s, e) => ToggleWeapon(type));
+            controls.WeaponButton = CreateButton("W", new Point(startX + 70, 5), settings.ShowWeapon ? Color.Green : Color.Red, (s, e) => ToggleWeapon(type));
 
             // 体力表示ボタン
-            controls.HealthButton = CreateButton("H", new Point(110, 30), settings.ShowHealth ? Color.Green : Color.Red, (s, e) => ToggleHealth(type));
+            controls.HealthButton = CreateButton("H", new Point(startX + 105, 5), settings.ShowHealth ? Color.Green : Color.Red, (s, e) => ToggleHealth(type));
 
             // 距離表示ボタン
-            controls.DistanceButton = CreateButton("D", new Point(145, 30), settings.ShowDistance ? Color.Green : Color.Red, (s, e) => ToggleDistance(type));
+            controls.DistanceButton = CreateButton("D", new Point(startX + 140, 5), settings.ShowDistance ? Color.Green : Color.Red, (s, e) => ToggleDistance(type));
 
             // 狙われ警告ボタン
-            controls.TargetedAlertButton = CreateButton("⚠", new Point(180, 30), settings.ShowTargetedAlert ? Color.Green : Color.Red, (s, e) => ToggleTargetedAlert(type));
+            controls.TargetedAlertButton = CreateButton("⚠", new Point(startX + 175, 5), settings.ShowTargetedAlert ? Color.Green : Color.Red, (s, e) => ToggleTargetedAlert(type));
 
             _playerTypeControls[type] = controls;
 
