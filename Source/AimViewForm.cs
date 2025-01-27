@@ -4,6 +4,7 @@ using SkiaSharp.Views.Desktop;
 using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace eft_dma_radar
 {
@@ -31,6 +32,33 @@ namespace eft_dma_radar
 
     public partial class AimViewForm : Form
     {
+        // Windows APIのインポート
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+        // Windows APIの定数
+        private const int GWL_STYLE = -16;
+        private const int WS_CAPTION = 0x00C00000;
+        private const int WS_SYSMENU = 0x00080000;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+        private const uint SWP_HIDEWINDOW = 0x0008;
+
+        private bool _isTitleBarVisible = true;
+        private bool _isTaskBarVisible = true;
+
         private readonly SKGLControl aimViewCanvas;
         private readonly Config config;
         private readonly object renderLock = new();
@@ -83,6 +111,7 @@ namespace eft_dma_radar
             this.Text = "AimView";
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.TopMost = true;
+            this.MaximizeBox = false;  // タイトルバーのダブルクリックによる最大化を無効化
                   
             // 背景色の設定
             UpdateBackgroundColor();
@@ -414,54 +443,76 @@ namespace eft_dma_radar
             this.config.AimviewSettings.X = this.Location.X;
             this.config.AimviewSettings.Y = this.Location.Y;
         }
+        
+        // タイトルバーの表示/非表示を切り替えるメソッド
+        public void ToggleTitleBar(bool? show = null)
+        {
+            var style = GetWindowLong(this.Handle, GWL_STYLE);
+            bool shouldShow = show ?? !_isTitleBarVisible;
+
+            if (!shouldShow)
+            {
+                style &= ~(WS_CAPTION | WS_SYSMENU);
+            }
+            else
+            {
+                style |= (WS_CAPTION | WS_SYSMENU);
+            }
+
+            SetWindowLong(this.Handle, GWL_STYLE, style);
+            SetWindowPos(this.Handle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+            _isTitleBarVisible = shouldShow;
+        }
+
+        // タスクバーの表示/非表示を切り替えるメソッド
+        public void ToggleTaskBar(bool? show = null)
+        {
+            IntPtr taskbarHandle = FindWindow("Shell_TrayWnd", null);
+            if (taskbarHandle != IntPtr.Zero)
+            {
+                bool shouldShow = show ?? !_isTaskBarVisible;
+
+                if (!shouldShow)
+                {
+                    // タスクバーを非表示
+                    SetWindowPos(taskbarHandle, IntPtr.Zero, 0, 0, 0, 0, 
+                        SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+                }
+                else
+                {
+                    // タスクバーを表示
+                    SetWindowPos(taskbarHandle, IntPtr.Zero, 0, 0, 0, 0, 
+                        SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+                }
+                _isTaskBarVisible = shouldShow;
+            }
+        }
 
         private void BtnToggleMaximize_Click(object sender, EventArgs e)
         {
             if (this.WindowState == FormWindowState.Maximized)
             {
                 this.WindowState = FormWindowState.Normal;
+                this.FormBorderStyle = FormBorderStyle.Sizable;
+                Thread.Sleep(50);
+                ToggleTitleBar(true);
+                Thread.Sleep(50);
+                ToggleTaskBar(true);
+                Thread.Sleep(50);
                 ((Button)sender).Text = "□";
             }
             else
             {
-                this.FormBorderStyle = FormBorderStyle.None;
+                ToggleTitleBar(false);
+                Thread.Sleep(50);
+                ToggleTaskBar(false);
+                Thread.Sleep(50);
                 this.WindowState = FormWindowState.Maximized;
-                this.StartPosition = FormStartPosition.CenterScreen;
+                this.FormBorderStyle = FormBorderStyle.None;
                 ((Button)sender).Text = "❐";
             }
-        }
-
-        protected override void OnSizeChanged(EventArgs e)
-        {
-            base.OnSizeChanged(e);
-            
-            // 最大化時にタイトルバーを非表示に
-            if (this.WindowState == FormWindowState.Maximized && this.FormBorderStyle != FormBorderStyle.None)
-            {
-                this.previousBorderStyle = this.FormBorderStyle;
-                this.wasTopMost = this.TopMost;
-                this.FormBorderStyle = FormBorderStyle.None;
-                this.TopMost = true;
-                
-                // ボタンの位置を調整
-                this.btnToggleMaximize.Location = new Point(5, 5);
-                this.btnRefresh.Location = new Point(30, 5);
-                this.btnToggleCrosshair.Location = new Point(55, 5);
-            }
-            // 最大化解除時に元のスタイルに戻す
-            else if (this.WindowState != FormWindowState.Maximized && this.FormBorderStyle == FormBorderStyle.None)
-            {
-                this.FormBorderStyle = this.previousBorderStyle;
-                this.TopMost = this.wasTopMost;
-                
-                // ボタンの位置を元に戻す
-                this.btnToggleMaximize.Location = new Point(5, 5);
-                this.btnRefresh.Location = new Point(30, 5);
-                this.btnToggleCrosshair.Location = new Point(55, 5);
-            }
-            
-            // 最大化ボタンのテキストを更新
-            this.btnToggleMaximize.Text = (this.WindowState == FormWindowState.Maximized) ? "❐" : "□";
         }
 
         private int GetUpdateFrequency(float distance)
