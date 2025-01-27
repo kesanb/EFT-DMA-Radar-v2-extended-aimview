@@ -70,7 +70,7 @@ namespace eft_dma_radar
             using var warningPaint = new SKPaint
             {
                 Color = player.IsTargetingLocalPlayer ? basePaint.Color.WithAlpha(127) : SKColors.Transparent,
-                StrokeWidth = 10,
+                StrokeWidth = 30,
                 Style = SKPaintStyle.Stroke
             };
             canvas.DrawRect(bounds, warningPaint);
