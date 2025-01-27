@@ -77,7 +77,7 @@ namespace eft_dma_radar
         private readonly Dictionary<string, int> _playerUpdateFrames = new();
         private int _currentFrame = 0;
         private Matrix4x4? _lastViewMatrix;
-        private const float RAPID_MOVEMENT_THRESHOLD = 0.1f; // 急速な動きの閾値
+        private const float RAPID_MOVEMENT_THRESHOLD = 0.1f;
 
         // ESPに必要なデータを保持するプロパティ
         public Player LocalPlayer { get; set; }

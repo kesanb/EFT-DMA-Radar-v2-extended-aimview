@@ -650,12 +650,6 @@ namespace eft_dma_radar
         [JsonPropertyName("useTransparentBackground")]
         public bool useTransparentBackground { get; set; } = false;
 
-        [JsonPropertyName("usePerformanceSkeleton")]
-        public bool usePerformanceSkeleton { get; set; } = false;
-
-        [JsonPropertyName("performanceSkeletonDistance")]
-        public float performanceSkeletonDistance { get; set; } = 120f;
-
         [JsonPropertyName("ObjectSettings")]
         public Dictionary<string, AimviewObjectSettings> ObjectSettings { get; set; }
 

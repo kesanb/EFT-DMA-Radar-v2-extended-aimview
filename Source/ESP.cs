@@ -9,6 +9,9 @@ namespace eft_dma_radar
         private readonly Config config;
         private const float AIMVIEW_OBJECT_SPACING = 4f;
         private float uiScale = 1.0f;
+        private readonly Dictionary<string, Dictionary<PlayerBones, Vector2>> _skeletonCache = new();
+        private readonly Dictionary<string, int> _lastUpdateFrame = new();
+        private int _currentFrame = 0;
 
         public ESP(Config config)
         {
@@ -138,78 +141,94 @@ namespace eft_dma_radar
             if (player?.Bones == null || player.Bones.Count == 0)
                 return;
 
-            var bonePositions = new List<Vector3>();
-            var screenPositions = new List<Vector2>();
-            var boneMapping = new Dictionary<int, PlayerBones>();
-            int index = 0;
+            _currentFrame++;
 
-            // 距離に応じて処理するボーンを選択（パフォーマンスモードが有効な場合）
-            var bonesToProcess = this.config.AimviewSettings.usePerformanceSkeleton ? 
-                GetDistanceBasedBones(distance) : 
-                player.Bones.Keys.ToArray();
+            // キャッシュの更新頻度を決定
+            int updateFrequency = GetUpdateFrequency(distance);
+            bool shouldUpdate = ShouldUpdatePosition(player.ProfileID, distance);
 
-            // 選択されたボーンの位置を収集
-            foreach (var boneType in bonesToProcess)
+            // キャッシュの初期化
+            if (!_skeletonCache.ContainsKey(player.ProfileID))
             {
-                if (player.Bones.TryGetValue(boneType, out var bone))
-                {
-                    bone.UpdatePosition();
-                    bonePositions.Add(bone.Position);
-                    boneMapping[index] = boneType;
-                    index++;
-                }
+                _skeletonCache[player.ProfileID] = new Dictionary<PlayerBones, Vector2>();
+                shouldUpdate = true;
             }
 
-            // 一括でスクリーン座標に変換
-            var visibilityResults = Extensions.WorldToScreenCombined(bonePositions, bounds.Width, bounds.Height, screenPositions);
-
-            // 可視ボーンのマッピングを作成
-            var visibleBones = new Dictionary<PlayerBones, Vector2>();
-            for (int i = 0; i < bonePositions.Count; i++)
+            if (shouldUpdate)
             {
-                if (visibilityResults[i])
+                _lastUpdateFrame[player.ProfileID] = _currentFrame;
+                _skeletonCache[player.ProfileID].Clear();
+
+                var bonePositions = new List<Vector3>();
+                var screenPositions = new List<Vector2>();
+                var boneMapping = new Dictionary<int, PlayerBones>();
+                int index = 0;
+
+                // 全ボーンの位置を収集
+                foreach (var boneType in player.Bones.Keys)
                 {
-                    var screenPos = screenPositions[i];
-                    screenPos.X += bounds.Left;
-                    screenPos.Y += bounds.Top;
-                    
-                    if (IsWithinDrawingBounds(screenPos, bounds))
+                    if (player.Bones.TryGetValue(boneType, out var bone))
                     {
-                        visibleBones[boneMapping[i]] = screenPos;
+                        bone.UpdatePosition();
+                        bonePositions.Add(bone.Position);
+                        boneMapping[index] = boneType;
+                        index++;
+                    }
+                }
+
+                // 一括でスクリーン座標に変換
+                var visibilityResults = Extensions.WorldToScreenCombined(bonePositions, bounds.Width, bounds.Height, screenPositions);
+
+                // キャッシュを更新
+                for (int i = 0; i < bonePositions.Count; i++)
+                {
+                    if (visibilityResults[i])
+                    {
+                        var screenPos = screenPositions[i];
+                        screenPos.X += bounds.Left;
+                        screenPos.Y += bounds.Top;
+                        
+                        if (IsWithinDrawingBounds(screenPos, bounds))
+                        {
+                            _skeletonCache[player.ProfileID][boneMapping[i]] = screenPos;
+                        }
                     }
                 }
             }
 
-            // ボーンの接続を描画
+            // キャッシュされた座標を使用して描画
             var paint = player.GetAimviewPaint();
             paint.Style = SKPaintStyle.Stroke;
             paint.StrokeWidth = 2.0f;
 
-            if (visibleBones.Count >= 2)
+            if (_skeletonCache[player.ProfileID].Count >= 2)
             {
-                if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
+                DrawFullSkeleton(canvas, _skeletonCache[player.ProfileID], paint);
+                
+                // 頭部インジケーターを表示
+                if (_skeletonCache[player.ProfileID].TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
                 {
-                    // パフォーマンスモード無効時または閾値以下：フルスケルトン
-                    DrawFullSkeleton(canvas, visibleBones, paint);
-                    
-                    // 頭部インジケーターを表示
-                    if (visibleBones.TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
-                    {
-                        paint.Style = SKPaintStyle.Stroke;
-                        float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
-                        canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
-                    }
+                    paint.Style = SKPaintStyle.Stroke;
+                    float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
+                    canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
                 }
             }
+        }
 
-            // パフォーマンスモード有効時の遠距離：骨盤位置にドットを表示
-            if (this.config.AimviewSettings.usePerformanceSkeleton && distance > this.config.AimviewSettings.performanceSkeletonDistance && 
-                visibleBones.TryGetValue(PlayerBones.HumanPelvis, out Vector2 pelvisPos))
-            {
-                paint.Style = SKPaintStyle.Fill;
-                float dotSize = CalculateDistanceBasedSize(distance, 6.0f, 2.0f, 0.02f);
-                canvas.DrawCircle(pelvisPos.X, pelvisPos.Y, dotSize, paint);
-            }
+        private int GetUpdateFrequency(float distance)
+        {
+            if (distance <= 50f) return 2;
+            if (distance <= 100f) return 4;
+            return 6;
+        }
+
+        private bool ShouldUpdatePosition(string playerId, float distance)
+        {
+            if (!_lastUpdateFrame.ContainsKey(playerId))
+                return true;
+
+            int updateFrequency = GetUpdateFrequency(distance);
+            return (_currentFrame - _lastUpdateFrame[playerId]) >= updateFrequency;
         }
 
         public void DrawFullSkeleton(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, SKPaint paint)
@@ -302,36 +321,6 @@ namespace eft_dma_radar
             
             var dotSize = CalculateDistanceBasedSize(distance);
             canvas.DrawCircle(pelvisScreenPos.X, pelvisScreenPos.Y, dotSize, paint);
-        }
-
-        public PlayerBones[] GetDistanceBasedBones(float distance)
-        {
-            if (!this.config.AimviewSettings.usePerformanceSkeleton || distance <= this.config.AimviewSettings.performanceSkeletonDistance)
-            {
-                // パフォーマンスモード無効時または閾値以下：フルスケルトン
-                return new[]
-                {
-                    PlayerBones.HumanHead,
-                    PlayerBones.HumanSpine3,
-                    PlayerBones.HumanPelvis,
-                    PlayerBones.HumanLForearm1,
-                    PlayerBones.HumanLPalm,
-                    PlayerBones.HumanRForearm1,
-                    PlayerBones.HumanRPalm,
-                    PlayerBones.HumanLCalf,
-                    PlayerBones.HumanLFoot,
-                    PlayerBones.HumanRCalf,
-                    PlayerBones.HumanRFoot
-                };
-            }
-            else
-            {
-                // 遠距離：骨盤位置のみ
-                return new[]
-                {
-                    PlayerBones.HumanPelvis
-                };
-            }
         }
 
         public float CalculateObjectSize(float distance, bool isText = false)
