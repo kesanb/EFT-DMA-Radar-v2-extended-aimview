@@ -9,13 +9,12 @@ namespace eft_dma_radar
         private readonly Config config;
         private const float AIMVIEW_OBJECT_SPACING = 4f;
         private float uiScale = 1.0f;
-        private readonly Dictionary<string, Dictionary<PlayerBones, Vector2>> _skeletonCache = new();
-        private readonly Dictionary<string, int> _lastUpdateFrame = new();
-        private int _currentFrame = 0;
+        private readonly ESPSystem _espSystem;
 
         public ESP(Config config)
         {
             this.config = config;
+            _espSystem = new ESPSystem(config);
         }
 
         public void SetUIScale(float scale)
@@ -45,7 +44,7 @@ namespace eft_dma_radar
                 switch (typeSettings.ESPStyle)
                 {
                     case ESPStyle.Skeleton:
-                        DrawPlayerSkeleton(canvas, player, GetAimviewBounds(canvas), distance);
+                        DrawPlayerSkeleton(player, canvas);
                         break;
                     case ESPStyle.Box:
                         textPosition = DrawPlayerBox(canvas, player, distance, objectSettings);
@@ -136,127 +135,103 @@ namespace eft_dma_radar
             }
         }
 
-        public void DrawPlayerSkeleton(SKCanvas canvas, Player player, SKRect bounds, float distance)
+        private readonly struct BoneConnection
         {
-            if (player?.Bones == null || player.Bones.Count == 0)
-                return;
-
-            _currentFrame++;
-
-            // キャッシュの更新頻度を決定
-            int updateFrequency = GetUpdateFrequency(distance);
-            bool shouldUpdate = ShouldUpdatePosition(player.ProfileID, distance);
-
-            // キャッシュの初期化
-            if (!_skeletonCache.ContainsKey(player.ProfileID))
-            {
-                _skeletonCache[player.ProfileID] = new Dictionary<PlayerBones, Vector2>();
-                shouldUpdate = true;
-            }
-
-            if (shouldUpdate)
-            {
-                _lastUpdateFrame[player.ProfileID] = _currentFrame;
-                _skeletonCache[player.ProfileID].Clear();
-
-                var bonePositions = new List<Vector3>();
-                var screenPositions = new List<Vector2>();
-                var boneMapping = new Dictionary<int, PlayerBones>();
-                int index = 0;
-
-                // 全ボーンの位置を収集
-                foreach (var boneType in player.Bones.Keys)
-                {
-                    if (player.Bones.TryGetValue(boneType, out var bone))
-                    {
-                        bone.UpdatePosition();
-                        bonePositions.Add(bone.Position);
-                        boneMapping[index] = boneType;
-                        index++;
-                    }
-                }
-
-                // 一括でスクリーン座標に変換
-                var visibilityResults = Extensions.WorldToScreenCombined(bonePositions, bounds.Width, bounds.Height, screenPositions);
-
-                // キャッシュを更新
-                for (int i = 0; i < bonePositions.Count; i++)
-                {
-                    if (visibilityResults[i])
-                    {
-                        var screenPos = screenPositions[i];
-                        screenPos.X += bounds.Left;
-                        screenPos.Y += bounds.Top;
-                        
-                        if (IsWithinDrawingBounds(screenPos, bounds))
-                        {
-                            _skeletonCache[player.ProfileID][boneMapping[i]] = screenPos;
-                        }
-                    }
-                }
-            }
-
-            // キャッシュされた座標を使用して描画
-            var paint = player.GetAimviewPaint();
-            paint.Style = SKPaintStyle.Stroke;
-            paint.StrokeWidth = 2.0f;
-
-            if (_skeletonCache[player.ProfileID].Count >= 2)
-            {
-                DrawFullSkeleton(canvas, _skeletonCache[player.ProfileID], paint);
-                
-                // 頭部インジケーターを表示
-                if (_skeletonCache[player.ProfileID].TryGetValue(PlayerBones.HumanHead, out Vector2 headPos))
-                {
-                    paint.Style = SKPaintStyle.Stroke;
-                    float headSize = CalculateDistanceBasedSize(distance, 8.0f, 2.0f, 0.02f);
-                    canvas.DrawCircle(headPos.X, headPos.Y, headSize, paint);
-                }
-            }
+            public PlayerBones Start { get; init; }
+            public PlayerBones End { get; init; }
         }
 
-        private int GetUpdateFrequency(float distance)
-        {
-            if (distance <= 50f) return 2;
-            if (distance <= 100f) return 4;
-            return 6;
-        }
-
-        private bool ShouldUpdatePosition(string playerId, float distance)
-        {
-            if (!_lastUpdateFrame.ContainsKey(playerId))
-                return true;
-
-            int updateFrequency = GetUpdateFrequency(distance);
-            return (_currentFrame - _lastUpdateFrame[playerId]) >= updateFrequency;
-        }
-
-        public void DrawFullSkeleton(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, SKPaint paint)
+        private static readonly BoneConnection[] BoneConnections = new[]
         {
             // メインボディ
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanHead, PlayerBones.HumanSpine3, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanPelvis, paint);
+            new BoneConnection { Start = PlayerBones.HumanHead, End = PlayerBones.HumanSpine3 },
+            new BoneConnection { Start = PlayerBones.HumanSpine3, End = PlayerBones.HumanPelvis },
 
             // 腕
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanLForearm1, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLForearm1, PlayerBones.HumanLPalm, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanSpine3, PlayerBones.HumanRForearm1, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRForearm1, PlayerBones.HumanRPalm, paint);
+            new BoneConnection { Start = PlayerBones.HumanSpine3, End = PlayerBones.HumanLForearm1 },
+            new BoneConnection { Start = PlayerBones.HumanLForearm1, End = PlayerBones.HumanLPalm },
+            new BoneConnection { Start = PlayerBones.HumanSpine3, End = PlayerBones.HumanRForearm1 },
+            new BoneConnection { Start = PlayerBones.HumanRForearm1, End = PlayerBones.HumanRPalm },
 
             // 脚
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanLCalf, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanLCalf, PlayerBones.HumanLFoot, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanPelvis, PlayerBones.HumanRCalf, paint);
-            DrawBoneConnectionIfVisible(canvas, visibleBones, PlayerBones.HumanRCalf, PlayerBones.HumanRFoot, paint);
+            new BoneConnection { Start = PlayerBones.HumanPelvis, End = PlayerBones.HumanLCalf },
+            new BoneConnection { Start = PlayerBones.HumanLCalf, End = PlayerBones.HumanLFoot },
+            new BoneConnection { Start = PlayerBones.HumanPelvis, End = PlayerBones.HumanRCalf },
+            new BoneConnection { Start = PlayerBones.HumanRCalf, End = PlayerBones.HumanRFoot }
+        };
+
+        private SKColor GetPlayerColor(Player player)
+        {
+            return player.GetAimviewPaint().Color;
         }
 
-        public void DrawBoneConnectionIfVisible(SKCanvas canvas, Dictionary<PlayerBones, Vector2> visibleBones, 
-            PlayerBones bone1, PlayerBones bone2, SKPaint paint)
+        private void DrawPlayerSkeleton(Player player, SKCanvas canvas)
         {
-            if (visibleBones.TryGetValue(bone1, out Vector2 start) && 
-                visibleBones.TryGetValue(bone2, out Vector2 end))
+            if (player?.Bones == null)
+                return;
+
+            // プレイヤータイプごとの設定を取得
+            var typeSettings = GetPlayerTypeSettings(player.Type);
+            var objectSettings = config.AimviewSettings.ObjectSettings["Player"];
+            
+            // 距離チェック
+            var distance = Vector3.Distance(player.Position, _espSystem.LocalPlayer?.Position ?? Vector3.Zero);
+            var maxDistance = Math.Max(objectSettings.PaintDistance, objectSettings.TextDistance);
+            if (distance > maxDistance)
+                return;
+
+            var bounds = canvas.DeviceClipBounds;
+            var bonePositions = _espSystem.GetPlayerBonePositions(player.ProfileID);
+            if (bonePositions == null || bonePositions.Count == 0)
+                return;
+
+            // ワールド座標をまとめて取得
+            var worldPositions = new List<Vector3>();
+            var boneTypes = new List<PlayerBones>();
+            foreach (var kvp in bonePositions)
             {
-                canvas.DrawLine(start.X, start.Y, end.X, end.Y, paint);
+                worldPositions.Add(kvp.Value);
+                boneTypes.Add(kvp.Key);
+            }
+
+            // スクリーン座標に一括変換（SIMD使用）
+            var screenPositions = new List<Vector2>();
+            var results = Extensions.WorldToScreenCombinedSIMD(worldPositions, bounds.Width, bounds.Height, screenPositions);
+
+            // 変換結果をディクショナリに格納
+            var screenCoords = new Dictionary<PlayerBones, Vector2>();
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (results[i])
+                {
+                    screenCoords[boneTypes[i]] = screenPositions[i];
+                }
+            }
+
+            // ボーンの描画
+            using var paint = new SKPaint
+            {
+                Color = GetPlayerColor(player),
+                StrokeWidth = 1,
+                IsAntialias = true
+            };
+
+            // 各ボーンラインを描画
+            foreach (var boneLine in BoneConnections)
+            {
+                if (screenCoords.TryGetValue(boneLine.Start, out var start) && 
+                    screenCoords.TryGetValue(boneLine.End, out var end))
+                {
+                    canvas.DrawLine(start.X, start.Y, end.X, end.Y, paint);
+                }
+            }
+
+            // 頭部インジケーターを描画
+            if (screenCoords.TryGetValue(PlayerBones.HumanHead, out var headPos))
+            {
+                var headRadius = CalculateDistanceBasedSize(distance);
+                paint.Style = SKPaintStyle.Stroke;
+                canvas.DrawCircle(headPos.X, headPos.Y, headRadius, paint);
             }
         }
 
@@ -265,23 +240,30 @@ namespace eft_dma_radar
             if (player?.Bones == null || distance >= objectSettings.PaintDistance)
                 return Vector2.Zero;
 
-            // 頭とベースのボーンの位置を取得
+            // 頭と骨盤のボーンの位置を取得
             if (!player.Bones.TryGetValue(PlayerBones.HumanHead, out var headBone) ||
-                !player.Bones.TryGetValue(PlayerBones.HumanBase, out var baseBone))
+                !player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
                 return Vector2.Zero;
 
             // ボーンの位置を更新
             headBone.UpdatePosition();
-            baseBone.UpdatePosition();
+            pelvisBone.UpdatePosition();
 
             var bounds = GetAimviewBounds(canvas);
             if (!TryGetScreenPosition(headBone.Position, bounds, out Vector2 headScreenPos) ||
-                !TryGetScreenPosition(baseBone.Position, bounds, out Vector2 baseScreenPos))
+                !TryGetScreenPosition(pelvisBone.Position, bounds, out Vector2 pelvisScreenPos))
                 return Vector2.Zero;
 
-            // ボックスのサイズを計算（距離に応じて調整）
-            float height = baseScreenPos.Y - headScreenPos.Y;
-            float width = height * 0.4f;
+            // ボックスのサイズを計算
+            float height = pelvisScreenPos.Y - headScreenPos.Y;
+
+
+            // 上に10%、下に30%高さを伸ばす
+            float topExtension = height * 0.2f;    // 上部の伸び
+            float bottomExtension = height * 1.3f;  // 下部の伸び
+            float extendedHeight = height + topExtension + bottomExtension;
+
+            float width = extendedHeight * 0.4f;
 
             using var paint = player.GetAimviewPaint();
             paint.Style = SKPaintStyle.Stroke;
@@ -289,14 +271,19 @@ namespace eft_dma_radar
 
             var boxRect = SKRect.Create(
                 headScreenPos.X - width / 2,
-                headScreenPos.Y,
+                headScreenPos.Y - topExtension,
                 width,
-                height
+                extendedHeight
             );
 
             canvas.DrawRect(boxRect, paint);
 
-            return baseScreenPos;
+            // 頭部インジケーターを描画
+            var headRadius = CalculateDistanceBasedSize(distance);
+            paint.Style = SKPaintStyle.Stroke;
+            canvas.DrawCircle(headScreenPos.X, headScreenPos.Y, headRadius, paint);
+
+            return pelvisScreenPos;
         }
 
         public void DrawPlayerDot(SKCanvas canvas, Player player, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
@@ -304,23 +291,23 @@ namespace eft_dma_radar
             if (distance >= objectSettings.PaintDistance)
                 return;
 
-            // プレイヤーの位置を骨盤の位置から取得
-            if (player?.Bones == null || !player.Bones.TryGetValue(PlayerBones.HumanPelvis, out var pelvisBone))
+            // プレイヤーの位置を頭の位置から取得
+            if (player?.Bones == null || !player.Bones.TryGetValue(PlayerBones.HumanHead, out var headBone))
                 return;
 
-            // 骨盤の位置を更新
-            pelvisBone.UpdatePosition();
+            // 頭の位置を更新
+            headBone.UpdatePosition();
             var bounds = GetAimviewBounds(canvas);
             
-            // 骨盤の位置をスクリーン座標に変換
-            if (!TryGetScreenPosition(pelvisBone.Position, bounds, out Vector2 pelvisScreenPos))
+            // 頭の位置をスクリーン座標に変換
+            if (!TryGetScreenPosition(headBone.Position, bounds, out Vector2 headScreenPos))
                 return;
 
             var paint = player.GetAimviewPaint();
-            paint.Style = SKPaintStyle.Fill;
+            paint.Style = SKPaintStyle.Stroke;
             
             var dotSize = CalculateDistanceBasedSize(distance);
-            canvas.DrawCircle(pelvisScreenPos.X, pelvisScreenPos.Y, dotSize, paint);
+            canvas.DrawCircle(headScreenPos.X, headScreenPos.Y, dotSize, paint);
         }
 
         public float CalculateObjectSize(float distance, bool isText = false)
@@ -364,12 +351,14 @@ namespace eft_dma_radar
                 {
                     screenPosition.X += bounds.Left;
                     screenPosition.Y += bounds.Top;
+                    return true;
                 }
 
-                return isVisible;
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
+                Program.Log($"[TryGetScreenPosition] Error: {ex.Message}");
                 return false;
             }
         }
@@ -595,6 +584,16 @@ namespace eft_dma_radar
             {
                 return null;
             }
+        }
+
+        public void UpdatePlayers(Player localPlayer, ReadOnlyDictionary<string, Player> allPlayers)
+        {
+            _espSystem.UpdatePlayers(localPlayer, allPlayers);
+        }
+
+        public void Dispose()
+        {
+            _espSystem?.Dispose();
         }
     }
 } 

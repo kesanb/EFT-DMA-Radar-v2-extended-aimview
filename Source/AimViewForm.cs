@@ -77,7 +77,6 @@ namespace eft_dma_radar
         private readonly Dictionary<string, int> _playerUpdateFrames = new();
         private int _currentFrame = 0;
         private Matrix4x4? _lastViewMatrix;
-        private const float RAPID_MOVEMENT_THRESHOLD = 0.1f;
 
         // ESPに必要なデータを保持するプロパティ
         public Player LocalPlayer { get; set; }
@@ -529,6 +528,7 @@ namespace eft_dma_radar
         {
             this.AllPlayers = allPlayers;
             this.LocalPlayer = localPlayer;
+            this.esp.UpdatePlayers(localPlayer, allPlayers);
         }
 
         private void BtnRefresh_Click(object sender, EventArgs e)
@@ -561,6 +561,7 @@ namespace eft_dma_radar
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
+            this.esp?.Dispose();
         }
 
         private PlayerTypeSettings GetPlayerTypeSettings(PlayerType type)

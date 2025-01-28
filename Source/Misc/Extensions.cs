@@ -1,6 +1,8 @@
 ﻿using SkiaSharp;
 using System.Numerics;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace eft_dma_radar
 {
@@ -125,6 +127,90 @@ namespace eft_dma_radar
 
                 results.Add(true);
                 screenPositions.Add(screenPos);
+            }
+
+            return results;
+        }
+
+        public static List<bool> WorldToScreenCombinedSIMD(List<Vector3> positions, float width, float height, List<Vector2> screenPositions)
+        {
+            var results = new List<bool>();
+            screenPositions.Clear();
+
+            if (positions.Count == 0 || Memory.CameraManager?.ViewMatrix == null)
+            {
+                return results;
+            }
+
+            // ビュー行列を一度だけ取得
+            var viewMatrix = Matrix4x4.Transpose(Memory.CameraManager.ViewMatrix);
+
+            // 共通ベクトルを事前計算
+            var translationVector = Vector128.Create(viewMatrix.M41, viewMatrix.M42, viewMatrix.M43, viewMatrix.M44);
+            var upVector = Vector128.Create(viewMatrix.M21, viewMatrix.M22, viewMatrix.M23, viewMatrix.M24);
+            var rightVector = Vector128.Create(viewMatrix.M11, viewMatrix.M12, viewMatrix.M13, viewMatrix.M14);
+
+            // 画面サイズの半分を事前計算
+            var halfWidth = width * 0.5f;
+            var halfHeight = height * 0.5f;
+
+            // 4つの位置ベクトルを同時に処理
+            for (int i = 0; i < positions.Count; i += 4)
+            {
+                var remainingCount = Math.Min(4, positions.Count - i);
+                var positionsArray = new Vector3[4];
+                
+                // 位置ベクトルをロード
+                for (int j = 0; j < remainingCount; j++)
+                {
+                    positionsArray[j] = positions[i + j];
+                }
+
+                // SIMD演算用のベクトルを作成
+                var pos0 = Vector128.Create(positionsArray[0].X, positionsArray[0].Y, positionsArray[0].Z, 1.0f);
+                var pos1 = remainingCount > 1 ? Vector128.Create(positionsArray[1].X, positionsArray[1].Y, positionsArray[1].Z, 1.0f) : Vector128<float>.Zero;
+                var pos2 = remainingCount > 2 ? Vector128.Create(positionsArray[2].X, positionsArray[2].Y, positionsArray[2].Z, 1.0f) : Vector128<float>.Zero;
+                var pos3 = remainingCount > 3 ? Vector128.Create(positionsArray[3].X, positionsArray[3].Y, positionsArray[3].Z, 1.0f) : Vector128<float>.Zero;
+
+                // 行列演算をSIMDで実行
+                var w = Vector128.Create(
+                    Vector128.Dot(translationVector, pos0),
+                    Vector128.Dot(translationVector, pos1),
+                    Vector128.Dot(translationVector, pos2),
+                    Vector128.Dot(translationVector, pos3)
+                );
+
+                var y = Vector128.Create(
+                    Vector128.Dot(upVector, pos0),
+                    Vector128.Dot(upVector, pos1),
+                    Vector128.Dot(upVector, pos2),
+                    Vector128.Dot(upVector, pos3)
+                );
+
+                var x = Vector128.Create(
+                    Vector128.Dot(rightVector, pos0),
+                    Vector128.Dot(rightVector, pos1),
+                    Vector128.Dot(rightVector, pos2),
+                    Vector128.Dot(rightVector, pos3)
+                );
+
+                // 結果を処理
+                for (int j = 0; j < remainingCount; j++)
+                {
+                    var wValue = w.GetElement(j);
+                    if (wValue < 0.098f)
+                    {
+                        results.Add(false);
+                        screenPositions.Add(Vector2.Zero);
+                        continue;
+                    }
+
+                    var screenX = halfWidth * (1f + x.GetElement(j) / wValue);
+                    var screenY = halfHeight * (1f - y.GetElement(j) / wValue);
+
+                    results.Add(true);
+                    screenPositions.Add(new Vector2(screenX, screenY));
+                }
             }
 
             return results;

@@ -129,7 +129,6 @@ namespace eft_dma_radar
         #region Getters
         public static List<PlayerBones> RequiredBones { get; } = new List<PlayerBones>
         {
-            PlayerBones.HumanBase,
             PlayerBones.HumanHead,
             PlayerBones.HumanSpine3,
             PlayerBones.HumanLPalm,
