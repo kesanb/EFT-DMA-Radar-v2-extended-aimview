@@ -164,11 +164,49 @@ namespace eft_dma_radar
                 if (player?.Bones == null)
                     return;
 
+                // プレイヤータイプごとの設定を取得
+                var typeSettings = _config.AimviewSettings.PlayerTypeSettings.TryGetValue(
+                    player.Type == PlayerType.BEAR || player.Type == PlayerType.USEC ? PlayerType.PMC : player.Type,
+                    out var settings) ? settings : new PlayerTypeSettings();
+
                 var bonePositions = new Dictionary<PlayerBones, Vector3>();
-                foreach (var kvp in player.Bones)
+
+                // ESPスタイルに基づいて必要なボーンのみを更新
+                switch (typeSettings.ESPStyle)
                 {
-                    kvp.Value.UpdatePosition();
-                    bonePositions[kvp.Key] = kvp.Value.Position;
+                    case ESPStyle.Skeleton:
+                        // スケルトン表示の場合は全ボーンを更新
+                        foreach (var kvp in player.Bones)
+                        {
+                            kvp.Value.UpdatePosition();
+                            bonePositions[kvp.Key] = kvp.Value.Position;
+                        }
+                        break;
+
+                    case ESPStyle.Box:
+                        // ボックス表示の場合は主要なボーンのみを更新
+                        var boxBones = new[] { 
+                            PlayerBones.HumanHead,
+                            PlayerBones.HumanPelvis,
+                        };
+                        foreach (var bone in boxBones)
+                        {
+                            if (player.Bones.TryGetValue(bone, out var boneObject))
+                            {
+                                boneObject.UpdatePosition();
+                                bonePositions[bone] = boneObject.Position;
+                            }
+                        }
+                        break;
+
+                    case ESPStyle.Dot:
+                        // ドット表示の場合は頭部のみを更新
+                        if (player.Bones.TryGetValue(PlayerBones.HumanHead, out var headBone))
+                        {
+                            headBone.UpdatePosition();
+                            bonePositions[PlayerBones.HumanHead] = headBone.Position;
+                        }
+                        break;
                 }
 
                 _boneCache[player.ProfileID] = new PlayerBoneData
@@ -189,9 +227,9 @@ namespace eft_dma_radar
             if (!_boneCache.TryGetValue(profileId, out var data))
                 return true;
 
-            var updateInterval = 33; // ~30Hz
+            const int UPDATE_INTERVAL = 33; // 固定の更新間隔（~30Hz）
             var timeSinceLastUpdate = (DateTime.UtcNow - data.LastUpdateTime).TotalMilliseconds;
-            return timeSinceLastUpdate >= updateInterval;
+            return timeSinceLastUpdate >= UPDATE_INTERVAL;
         }
 
         private void CleanupCache()

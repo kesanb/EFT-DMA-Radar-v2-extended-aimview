@@ -514,15 +514,6 @@ namespace eft_dma_radar
             }
         }
 
-        private int GetUpdateFrequency(float distance)
-        {
-            // 通常の距離ベースの更新頻度のみを保持
-            if (distance <= 30f) return 1;
-            if (distance <= 50f) return 3;
-            if (distance <= 100f) return 7;
-            return 11;
-        }
-
         // プレイヤーリストを更新するためのパブリックメソッドを追加
         public void UpdatePlayerList(ReadOnlyDictionary<string, Player> allPlayers, Player localPlayer)
         {

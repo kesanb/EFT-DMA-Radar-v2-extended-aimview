@@ -81,7 +81,7 @@ namespace eft_dma_radar
         public void DrawPlayerTextInfo(SKCanvas canvas, Player player, float distance, Vector2 screenPos, AimviewObjectSettings objectSettings, PlayerTypeSettings typeSettings)
         {
             var textPaint = player.GetAimviewTextPaint();
-            textPaint.TextSize = CalculateFontSize(distance);
+            textPaint.TextSize = 14f * uiScale;
             textPaint.TextAlign = SKTextAlign.Left;
             var textX = screenPos.X + 20;
             var currentY = screenPos.Y + 20;
@@ -310,18 +310,6 @@ namespace eft_dma_radar
             canvas.DrawCircle(headScreenPos.X, headScreenPos.Y, dotSize, paint);
         }
 
-        public float CalculateObjectSize(float distance, bool isText = false)
-        {
-            var size = isText ? 12f : 3f;
-            return Math.Max(size * (1f - distance / 1000f) * uiScale, size * 0.3f * uiScale);
-        }
-
-        public float CalculateFontSize(float distance, bool small = false)
-        {
-            var baseSize = small ? 12f : 14f;
-            return Math.Max(baseSize * (1f - distance / 1000f) * uiScale, baseSize * 0.3f * uiScale);
-        }
-
         public float CalculateDistanceBasedSize(float distance, float maxSize = 8.0f, float minSize = 1.0f, float decayFactor = 0.02f)
         {
             var scale = (float)Math.Exp(-decayFactor * distance);
@@ -459,16 +447,15 @@ namespace eft_dma_radar
 
             if (distance < objectSettings.PaintDistance)
             {
-                var objectSize = CalculateObjectSize(distance);
                 var paint = lootObject.GetAimviewPaint();
-                canvas.DrawCircle(screenPos.X, currentY, objectSize, paint);
-                currentY += (AIMVIEW_OBJECT_SPACING + objectSize) * uiScale;
+                canvas.DrawCircle(screenPos.X, currentY, 3f * uiScale, paint);
+                currentY += (AIMVIEW_OBJECT_SPACING + 3f) * uiScale;
             }
 
             if (distance < objectSettings.TextDistance)
             {
                 var textPaint = lootObject.GetAimviewTextPaint();
-                textPaint.TextSize = CalculateFontSize(distance, true);
+                textPaint.TextSize = 12f * uiScale;
                 textPaint.TextAlign = SKTextAlign.Center;
 
                 if (objectSettings.Name)
@@ -513,7 +500,7 @@ namespace eft_dma_radar
             if (distance < objectSettings.TextDistance)
             {
                 var textPaint = tripwire.GetAimviewTextPaint();
-                textPaint.TextSize = CalculateFontSize(distance, true);
+                textPaint.TextSize = 12f * uiScale;
                 var currentY = fromScreenPos.Y;
 
                 if (objectSettings.Name)
@@ -529,16 +516,15 @@ namespace eft_dma_radar
 
         private void DrawExfil(SKCanvas canvas, Exfil exfil, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
         {
-            var objectSize = CalculateFontSize(distance);
             var textPaint = exfil.GetAimviewTextPaint();
-            textPaint.TextSize = objectSize;
+            textPaint.TextSize = 14f * uiScale;
 
             var currentY = screenPos.Y;
 
             if (objectSettings.Name)
             {
                 canvas.DrawText(exfil.Name, screenPos.X, currentY, textPaint);
-                currentY += objectSize * uiScale;
+                currentY += textPaint.TextSize * uiScale;
             }
 
             if (objectSettings.Distance)
@@ -547,16 +533,15 @@ namespace eft_dma_radar
 
         private void DrawTransit(SKCanvas canvas, Transit transit, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
         {
-            var objectSize = CalculateFontSize(distance);
             var textPaint = transit.GetAimviewTextPaint();
-            textPaint.TextSize = objectSize;
+            textPaint.TextSize = 14f * uiScale;
 
             var currentY = screenPos.Y;
 
             if (objectSettings.Name)
             {
                 canvas.DrawText(transit.Name, screenPos.X, currentY, textPaint);
-                currentY += objectSize * uiScale;
+                currentY += textPaint.TextSize * uiScale;
             }
 
             if (objectSettings.Distance)
