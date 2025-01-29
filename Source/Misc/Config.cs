@@ -399,12 +399,15 @@ namespace eft_dma_radar
             ["Cultist"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["LocalPlayer"] = new PlayerInformationSettings(true, true, true, true, 500, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["PMC"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
+            ["BEAR"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
+            ["USEC"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["PlayerScav"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Raider"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Rogue"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Scav"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Special"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Teammate"] = new PlayerInformationSettings(true, true, true, true, 500, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
+            ["FollowerOfMorana"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
             ["Zombie"] = new PlayerInformationSettings(true, true, true, true, 15, 255, 0, 13, false, false, false, false, false, false, false, false, false, false, false, false, false, 0, 13),
         };
 
