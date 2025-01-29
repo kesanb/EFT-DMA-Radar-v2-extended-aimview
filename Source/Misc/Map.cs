@@ -403,7 +403,7 @@ namespace eft_dma_radar
         public void DrawPlayerText(SKCanvas canvas, Player player, string[] aboveLines, string[] belowLines, string[] rightLines, string[] leftLines, int? mouseoverGrp)
         {
             var type = player.Type.ToString().Replace(" ", "");
-            if (player.IsPMC && player.Type is not PlayerType.Teammate && !player.IsLocalPlayer)
+            if ((player.Type is PlayerType.BEAR || player.Type is PlayerType.USEC) && !player.IsLocalPlayer && player.Type is not PlayerType.Teammate)
                 type = "PMC";
 
             var text = Extensions.PlayerTypeTextPaints[type];
