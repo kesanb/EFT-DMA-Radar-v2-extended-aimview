@@ -271,7 +271,8 @@ namespace eft_dma_radar
             ["TransitIcon"] = new PaintColor.Colors { A = 255, R = 255, G = 165, B = 0 },
 
             // Loot/Quests
-            ["RegularLoot"] = new PaintColor.Colors { A = 255, R = 245, G = 245, B = 245 },
+            ["RegularLoot"] = new PaintColor.Colors { A = 255, R = 255, G = 255, B = 255 },
+            ["Container"] = new PaintColor.Colors { A = 255, R = 200, G = 200, B = 200 },
             ["ImportantLoot"] = new PaintColor.Colors { A = 255, R = 64, G = 224, B = 208 },
             ["QuestItem"] = new PaintColor.Colors { A = 255, R = 255, G = 0, B = 128 },
             ["QuestZone"] = new PaintColor.Colors { A = 255, R = 255, G = 0, B = 128 },

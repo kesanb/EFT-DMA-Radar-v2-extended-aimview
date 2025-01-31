@@ -728,6 +728,7 @@ namespace eft_dma_radar
                 {
                     var tmpContainer = new LootContainer(container);
                     tmpContainer.AlwaysShow = true;
+                    tmpContainer.Color = Program.Config.PaintColors["Container"];
 
                     if (this._config.LootContainerSettings.ContainsKey(tmpContainer.Name))
                         if (this._config.LootContainerSettings[tmpContainer.Name])
