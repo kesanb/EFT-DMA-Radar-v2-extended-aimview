@@ -288,12 +288,62 @@
         public const uint ForceReact = 0x48; // [0x48] ForceReact : -.ForceEffector
         public const uint Shooting = 0x50; // [0x50] Shootingg : -.ShotEffector
         public const uint FirearmContoller = 0xB0; // [0xB0] _firearmController : -.Player.FirearmController
+        public const uint FirearmAnimationData = 0xA8; // [A8] _firearmAnimationData : -.GInterface7792
         public const uint Mask = 0x140; // [0x140] Mask : System.Int32
         public const uint IsAiming = 0x1C5; // [0x1C5] _isAiming : Boolean
         public const uint AimingSpeed = 0x1E4; // [0x1E4] _aimingSpeed : Single
         public const uint AimSwayStrength = 0x2B8; // [0x2B8] _aimSwayStrength : Single
         public const uint FovCompensatoryDistance = 0x1F8; // [0x1F8] _fovCompensatoryDistance : Single
+        public const uint ScopeAimTransformsList = 0xA0; // [A0] ScopeAimTransforms : System.Collections.Generic.List<SightNBone>
     }
+
+    public struct FirearmAnimationData
+    {
+        public const uint Item = 0x58; // [58] item_0x58 : EFT.InventoryLogic.Item
+    }
+
+    public struct  Weapon
+    {
+        public const uint AimIndex = 0xD8; // [D8] AimIndex : -.GClass37EA<Int32>
+    }
+
+    public struct AimIndex
+    {
+        public const uint Value = 0x30; // fixed value maybe
+    }
+
+    public struct ScopeAimTransformsList // [Class] -.ProceduralWeaponAnimation.SightNBone : Object
+    {
+        public const uint ScopeAimTransforms = 0x10; // [10] Mod : EFT.InventoryLogic.SightComponent
+    }
+
+    public struct ScopeAimTransforms // _items
+    {
+        public const uint Template = 0x20; // [20] _template : -.GInterfaceC6CF                 This needs + (AimIndex.Value * 0x8)]
+    }
+
+    public struct SightBone // _Item[0]
+    {
+        public const uint SightComponent = 0x10; // Mod
+    }
+
+    public struct SightComponent // Mod, [Class] EFT.InventoryLogic.SightComponent : GClass29CD
+    {
+        public const uint Item = 0x10; // [10] Item : EFT.InventoryLogic.Item
+        public const uint ScopesSelectedModes = 0x30; // [30] ScopesSelectedModes : System.Int32[]
+        public const uint Template = 0x20; // [20] _template : -.GInterfaceC6CF
+    }
+
+    public struct ScopeTemplate // GInterfaceC6CF
+    {
+        public const uint Zooms = 0x190; // [190] Zooms : System.Single[]
+    }
+
+    public struct SelectedScope
+    {
+        public const uint CurrentSelectedScope = 0x38; // Also may be wrong : int
+    }
+
 
     public struct HandsContainer
     {
@@ -303,6 +353,7 @@
     public struct FirearmController
     {
         public const uint WeaponLn = 0x184; // [184] WeaponLn : Single
+        public const uint Fireport = 0xC8; // [C8] Fireport : EFT.BifacialTransform // Aimbot
     }
 
     public struct HandsController
