@@ -448,10 +448,10 @@ namespace eft_dma_radar
 
             try
             {
-                var currentFOV = Memory.ReadValue<float>(this._fovPtr + 0x15C);
+                var currentFOV = Memory.ReadValue<float>(this._fovPtr + Offsets.FPSCamera.CameraFov);
 
                 if (currentFOV != fov)
-                    entries.Add(new ScatterWriteDataEntry<float>(this._fovPtr + 0x15C, (float)fov));
+                    entries.Add(new ScatterWriteDataEntry<float>(this._fovPtr + Offsets.FPSCamera.CameraFov, (float)fov));
             }
             catch (Exception ex)
             {

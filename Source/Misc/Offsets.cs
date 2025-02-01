@@ -749,12 +749,7 @@
     public struct FPSCamera
     {
         public static uint[] To_ViewMatrix = new uint[] { 0x30, 0x18 };
-        public const uint To_FPSCameraFov = 0x15C; // maybe wrong
-    }
-
-    public struct OpticCamera
-    {
-        public const uint To_OpticCameraFov = 0x15C; // maybe wrong
+        public const uint CameraFov = 0x15C; // maybe wrong
     }
 
     public struct ViewMatrix
