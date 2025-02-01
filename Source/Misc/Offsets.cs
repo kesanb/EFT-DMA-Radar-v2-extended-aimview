@@ -331,19 +331,14 @@
     {
         public const uint Item = 0x10; // [10] Item : EFT.InventoryLogic.Item
         public const uint ScopesSelectedModes = 0x30; // [30] ScopesSelectedModes : System.Int32[]
-        public const uint Template = 0x20; // [20] _template : -.GInterfaceC6CF
-    }
-
-    public struct ScopeTemplate // GInterfaceC6CF
-    {
-        public const uint Zooms = 0x190; // [190] Zooms : System.Single[]
-    }
-
-    public struct SelectedScope
-    {
+        public const uint SightInterface = 0x20; // [20] _template : -.GInterfaceC6CF
         public const uint CurrentSelectedScope = 0x38; // Also may be wrong : int
     }
 
+    public struct SightInterface // _template : -.GInterfaceC6CF
+    {
+        public const uint Zooms = 0x190; // [190] Zooms : System.Single[]
+    }
 
     public struct HandsContainer
     {
@@ -754,12 +749,12 @@
     public struct FPSCamera
     {
         public static uint[] To_ViewMatrix = new uint[] { 0x30, 0x18 };
-        public const uint To_FPSCameraFov = 0x15C;
+        public const uint To_FPSCameraFov = 0x15C; // maybe wrong
     }
 
     public struct OpticCamera
     {
-        public const uint To_OpticCameraFov = 0x15C;
+        public const uint To_OpticCameraFov = 0x15C; // maybe wrong
     }
 
     public struct ViewMatrix
