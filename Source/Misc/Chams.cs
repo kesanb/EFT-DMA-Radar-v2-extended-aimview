@@ -57,7 +57,8 @@ namespace eft_dma_radar
 
         private ulong _nvgMaterial;
         private ulong _thermalMaterial;
-
+        private const ulong RedChams = 4293997696;
+        private const ulong BlueChams = 4293997694;
         private Vector4 lastColor = new Vector4(0.0f, 0.0f, 0.0f, 0.0f);
 
         public void ChamsEnable()
@@ -124,7 +125,7 @@ namespace eft_dma_radar
                             break;
                         }
 
-                        var materialTouse = (player.IsHuman || player.Type == PlayerType.Boss) && player.IsAlive ? _nvgMaterial : _thermalMaterial;
+                        var materialTouse = (player.IsHuman || player.Type == PlayerType.Boss) && player.IsAlive ? RedChams : BlueChams;
 
                         if (this.PlayersWithChams.TryAdd(player.ProfileID, player))
                             this.SetPlayerBodyChams(player, materialTouse);
