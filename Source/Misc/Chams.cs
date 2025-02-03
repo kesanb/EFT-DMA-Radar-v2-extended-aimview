@@ -124,9 +124,9 @@ namespace eft_dma_radar
                             Program.Log("Chams -> not safe to write");
                             break;
                         }
-
-                        var materialTouse = (player.IsHuman || player.Type == PlayerType.Boss) && player.IsAlive ? RedChams : BlueChams;
-
+                        var materialTouse = (player.IsHuman || player.Type == PlayerType.Boss) && player.IsAlive ? _nvgMaterial : _thermalMaterial;
+                        // use below for vischeck chams
+                        // var materialTouse = (player.IsHuman || player.Type == PlayerType.Boss) && player.IsAlive ? BlueChams : RedChams;
                         if (this.PlayersWithChams.TryAdd(player.ProfileID, player))
                             this.SetPlayerBodyChams(player, materialTouse);
                     }
