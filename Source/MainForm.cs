@@ -6646,6 +6646,12 @@ namespace eft_dma_radar
                             this.aimViewForm.Corpses = new List<PlayerCorpse>();
                             this.aimViewForm.CameraManager = null;
 
+                            // アモ表示をクリア
+                            if (this.aimViewForm.ESP != null)
+                            {
+                                this.aimViewForm.ESP.ClearAmmoDisplay();
+                            }
+
                             // 強制的に再描画を要求して画面をクリア
                             this.aimViewForm.UpdateAndRedraw();
                             this.aimViewForm.Invalidate();

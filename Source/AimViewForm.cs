@@ -101,6 +101,9 @@ namespace eft_dma_radar
         // ESP描画システム
         private readonly ESP esp;
 
+        // ESPプロパティを追加
+        public ESP ESP => esp;
+
         public AimViewForm(Config config)
         {
             this.config = config;
