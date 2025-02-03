@@ -292,7 +292,7 @@ namespace eft_dma_radar
                 }
 
                 var checkHealth = this._healthSW.ElapsedMilliseconds > 1000;
-                var checkWeaponInfo = this._weaponSW.ElapsedMilliseconds > 2000;
+                var checkWeaponInfo = this._weaponSW.ElapsedMilliseconds > 1000;
                 var checkBones = this._boneSW.ElapsedMilliseconds > 16 && players.Any(x => x.IsHumanActive);
                 var initialisingMono = Memory.Toolbox?.InitialisingMonoAddresses ?? false;
 

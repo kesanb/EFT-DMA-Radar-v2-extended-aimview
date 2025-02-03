@@ -608,25 +608,9 @@ namespace eft_dma_radar
                 localPlayer.ItemInHands.Item.GearInfo.AmmoType == null)
                 return;
 
-            // テキスト表示位置（左に移動）
-            float ammoTextEndX = canvas.LocalClipBounds.Width - 30; // 25 -> 30に変更
-            float ammoTextY = canvas.LocalClipBounds.Height - 80;
-
-            // 残弾数テキストを描画
-            string ammoText = $"{localPlayer.ItemInHands.Item.GearInfo.AmmoCount} of {localPlayer.ItemInHands.Item.GearInfo.MaxMagCount}";
-            DrawRightAlignedAmmoText(
-                canvas,
-                ammoTextEndX,
-                ammoTextY,
-                ammoText,
-                SKColors.White,
-                25,
-                "Arial Unicode MS"
-            );
-
-            // プログレスバーの位置（左に移動）
-            float barX = canvas.LocalClipBounds.Width - 260; // 210 -> 260に変更
-            float barY = canvas.LocalClipBounds.Height - 50;
+            // 縦バーの位置（画面右端）
+            float barX = canvas.LocalClipBounds.Width - 40; // 右端からxピクセル
+            float barY = canvas.LocalClipBounds.Height - 270; // 下からxピクセル（より上に）
 
             // 残弾数バーを描画
             DrawAmmoBar(
@@ -634,12 +618,42 @@ namespace eft_dma_radar
                 barX,
                 barY,
                 localPlayer.ItemInHands.Item.GearInfo.AmmoCount,
-                localPlayer.ItemInHands.Item.GearInfo.MaxMagCount
+                localPlayer.ItemInHands.Item.GearInfo.MaxMagCount,
+                12,    // バーの幅
+                250    // バーの高さ
+            );
+
+            // テキスト表示位置（バーの左側）
+            float textEndX = barX - 20; // バーから30ピクセル離す
+
+            // アモタイプを表示（上）
+            DrawRightAlignedAmmoText(
+                canvas,
+                textEndX,
+                barY + 10, // 位置調整
+                localPlayer.ItemInHands.Item.GearInfo.AmmoTypeLong ?? localPlayer.ItemInHands.Item.GearInfo.AmmoType,
+                SKColors.LightGray,
+                16,  // フォントサイズ
+                "Bahnschrift",  // モダンなフォントに変更
+                200  // テキストボックス幅
+            );
+
+            // 残弾数テキストを描画（下）
+            string ammoText = $"{localPlayer.ItemInHands.Item.GearInfo.AmmoCount} / {localPlayer.ItemInHands.Item.GearInfo.MaxMagCount}";
+            DrawRightAlignedAmmoText(
+                canvas,
+                textEndX,
+                barY + 30, // 位置調整
+                ammoText,
+                SKColors.White,
+                32,  // フォントサイズを大きく
+                "DIN",  // モノスペースフォントに変更
+                200  // テキストボックス幅
             );
         }
 
-        // 残弾数バーを描画
-        private void DrawAmmoBar(SKCanvas canvas, float x, float y, int currentAmmo, int maxAmmo, float barWidth = 185, float barHeight = 8)
+        // 残弾数バーを描画（縦方向）
+        private void DrawAmmoBar(SKCanvas canvas, float x, float y, int currentAmmo, int maxAmmo, float barWidth = 8, float barHeight = 100)
         {
             // ボーダーの太さ
             float borderThickness = 1.0f;
@@ -679,20 +693,19 @@ namespace eft_dma_radar
             float g = Math.Min(ammoPercentage, 1.0f);
             SKColor fillColor = new SKColor((byte)(r * 255), (byte)(g * 255), 0, 255);
 
-            // フィルバーを描画（右から減少）
+            // フィルバーを描画（上から減少）
             using var fillPaint = new SKPaint
             {
                 Color = fillColor,
                 Style = SKPaintStyle.Fill
             };
 
-            float filledWidth = innerWidth * ammoPercentage;
-            // 右端から描画を開始するように変更
+            float filledHeight = innerHeight * ammoPercentage;
             canvas.DrawRect(
-                x + borderThickness + (innerWidth - filledWidth), // 右端からの位置を計算
-                y + borderThickness,
-                filledWidth,
-                innerHeight,
+                x + borderThickness,
+                y + borderThickness + (innerHeight - filledHeight), // 下端からの位置を計算
+                innerWidth,
+                filledHeight,
                 fillPaint
             );
         }

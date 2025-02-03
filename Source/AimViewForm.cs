@@ -299,7 +299,7 @@ namespace eft_dma_radar
 
             // ローカルプレイヤーの残弾数表示
             if (this.LocalPlayer != null && 
-                this.LocalPlayer.ItemInHands.Item.GearInfo.AmmoType != null)
+                this.LocalPlayer.ItemInHands.Item != null)
             {
                 esp.DrawLocalPlayerAmmo(canvas, this.LocalPlayer);
             }

@@ -250,6 +250,7 @@ namespace eft_dma_radar
 
                     var ammoCount = 0;
                     var ammoType = "";
+                    var ammoTypeLong = "";
                     var cartridgeStackBase = (cartridgeStackList + Offsets.UnityListBase.Start);
 
                     var ammoReadMap = new ScatterReadMap(cartridgeStackCount);
@@ -284,12 +285,16 @@ namespace eft_dma_radar
                             var ammoID = Memory.ReadUnityString(cartridgeBSGID);
 
                             if (TarkovDevManager.AllItems.TryGetValue(ammoID, out var firstRound))
+                            {
                                 ammoType = firstRound.Item.shortName;
+                                ammoTypeLong = firstRound.Item.name;
+                            }
                         }
                         catch { }
                     }
 
                     result.AmmoType = ammoType;
+                    result.AmmoTypeLong = ammoTypeLong;
                     result.AmmoCount = ammoCount;
                 }
 
@@ -415,6 +420,7 @@ namespace eft_dma_radar
 
                 var ammoCount = 0;
                 var ammoType = "";
+                var ammoTypeLong = "";
 
                 if (cartridgeStackCount > 0)
                 {
@@ -452,7 +458,10 @@ namespace eft_dma_radar
                             var ammoID = Memory.ReadUnityString(cartridgeBSGID);
 
                             if (TarkovDevManager.AllItems.TryGetValue(ammoID, out var firstRound))
+                            {
                                 ammoType = firstRound.Item.shortName;
+                                ammoTypeLong = firstRound.Item.name;
+                            }
                         }
                         catch { }
                     }
@@ -463,6 +472,7 @@ namespace eft_dma_radar
                     Thermal = this.ActiveWeapon.Item.GearInfo.Thermal,
                     NightVision = this.ActiveWeapon.Item.GearInfo.NightVision,
                     AmmoType = ammoType,
+                    AmmoTypeLong = ammoTypeLong,
                     AmmoCount = ammoCount,
                     MaxMagCount = maxCount
                 };
@@ -476,6 +486,7 @@ namespace eft_dma_radar
             public string Thermal;
             public string NightVision;
             public string AmmoType;
+            public string AmmoTypeLong;
             public int AmmoCount;
             public int MaxMagCount;
         }
