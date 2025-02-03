@@ -297,6 +297,13 @@ namespace eft_dma_radar
             // クロスヘアの描画
             this.DrawCrosshair(canvas, esp.GetAimviewBounds(canvas));
 
+            // ローカルプレイヤーの残弾数表示
+            if (this.LocalPlayer != null && 
+                this.LocalPlayer.ItemInHands.Item.GearInfo.AmmoType != null)
+            {
+                esp.DrawLocalPlayerAmmo(canvas, this.LocalPlayer);
+            }
+
             // RENDER PLAYERS
             var playerSettings = aimviewSettings.ObjectSettings["Player"];
             if (playerSettings != null && playerSettings.Enabled)

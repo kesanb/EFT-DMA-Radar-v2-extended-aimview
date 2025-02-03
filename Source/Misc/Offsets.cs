@@ -239,6 +239,7 @@
     public struct StackSlot // EFT.InventoryLogic.StackSlot : Object, IContainer
     {
         public const uint Items = 0x10; // [10] _items : System.Collections.Generic.List<Item>
+        public const uint MaxCount = 0x38; // [38] MaxCount : System.Int32
     }
 
     public struct ItemTemplate //EFT.InventoryLogic.ItemTemplate
@@ -749,11 +750,18 @@
     public struct FPSCamera
     {
         public static uint[] To_ViewMatrix = new uint[] { 0x30, 0x18 };
-        public const uint CameraFov = 0x15C; // maybe wrong
+        public const uint CameraFov = ViewMatrix.FOV; // maybe 0x60 or 0x180
+    }
+
+    public struct Camera
+    {
+        public static uint[] To_ViewMatrix = new uint[] { 0x30, 0x18 };
+        public const uint CameraFov = ViewMatrix.FOV; // maybe 0x60 or 0x180
     }
 
     public struct ViewMatrix
     {
         public const uint Matrix = 0x100;
+        public const uint FOV = 0x15C; // maybe 0x60 or 0x180
     }
 }

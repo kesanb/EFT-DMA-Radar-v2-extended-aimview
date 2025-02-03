@@ -580,5 +580,121 @@ namespace eft_dma_radar
         {
             _espSystem?.Dispose();
         }
+
+        // 残弾数テキストを右寄せで描画
+        private void DrawRightAlignedAmmoText(SKCanvas canvas, float endX, float y, string msg, SKColor color, float fontSize = 20, string fontFamily = "Arial Unicode MS", float boxWidth = 185)
+        {
+            // 右寄せのための開始X座標を計算
+            float startX = endX - boxWidth;
+
+            // テキストペイントの設定
+            using var paint = new SKPaint
+            {
+                Color = color,
+                TextSize = fontSize,
+                TextAlign = SKTextAlign.Right,
+                IsAntialias = true,
+                Typeface = SKTypeface.FromFamilyName(fontFamily)
+            };
+
+            // テキストを描画
+            canvas.DrawText(msg, endX, y + fontSize, paint);
+        }
+
+        // ローカルプレイヤーの残弾数を描画
+        public void DrawLocalPlayerAmmo(SKCanvas canvas, Player localPlayer)
+        {
+            if (localPlayer == null || 
+                localPlayer.ItemInHands.Item.GearInfo.AmmoType == null)
+                return;
+
+            // テキスト表示位置（左に移動）
+            float ammoTextEndX = canvas.LocalClipBounds.Width - 30; // 25 -> 30に変更
+            float ammoTextY = canvas.LocalClipBounds.Height - 80;
+
+            // 残弾数テキストを描画
+            string ammoText = $"{localPlayer.ItemInHands.Item.GearInfo.AmmoCount} of {localPlayer.ItemInHands.Item.GearInfo.MaxMagCount}";
+            DrawRightAlignedAmmoText(
+                canvas,
+                ammoTextEndX,
+                ammoTextY,
+                ammoText,
+                SKColors.White,
+                25,
+                "Arial Unicode MS"
+            );
+
+            // プログレスバーの位置（左に移動）
+            float barX = canvas.LocalClipBounds.Width - 260; // 210 -> 260に変更
+            float barY = canvas.LocalClipBounds.Height - 50;
+
+            // 残弾数バーを描画
+            DrawAmmoBar(
+                canvas,
+                barX,
+                barY,
+                localPlayer.ItemInHands.Item.GearInfo.AmmoCount,
+                localPlayer.ItemInHands.Item.GearInfo.MaxMagCount
+            );
+        }
+
+        // 残弾数バーを描画
+        private void DrawAmmoBar(SKCanvas canvas, float x, float y, int currentAmmo, int maxAmmo, float barWidth = 185, float barHeight = 8)
+        {
+            // ボーダーの太さ
+            float borderThickness = 1.0f;
+
+            // 残弾率を計算
+            float ammoPercentage = (float)currentAmmo / maxAmmo;
+
+            // バーの実際の描画領域を計算
+            float innerWidth = barWidth - (borderThickness * 2);
+            float innerHeight = barHeight - (borderThickness * 2);
+
+            // 外枠を描画（グレー）
+            using var borderPaint = new SKPaint
+            {
+                Color = new SKColor(128, 128, 128, 255),
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = borderThickness
+            };
+            canvas.DrawRect(x, y, barWidth, barHeight, borderPaint);
+
+            // 内側の背景を描画（暗めのグレー）
+            using var bgPaint = new SKPaint
+            {
+                Color = new SKColor(45, 45, 45, 255),
+                Style = SKPaintStyle.Fill
+            };
+            canvas.DrawRect(
+                x + borderThickness,
+                y + borderThickness,
+                innerWidth,
+                innerHeight,
+                bgPaint
+            );
+
+            // 残弾数に応じて色を変化（多い：緑 → 少ない：赤）
+            float r = Math.Max(1.0f - ammoPercentage, 0.0f);
+            float g = Math.Min(ammoPercentage, 1.0f);
+            SKColor fillColor = new SKColor((byte)(r * 255), (byte)(g * 255), 0, 255);
+
+            // フィルバーを描画（右から減少）
+            using var fillPaint = new SKPaint
+            {
+                Color = fillColor,
+                Style = SKPaintStyle.Fill
+            };
+
+            float filledWidth = innerWidth * ammoPercentage;
+            // 右端から描画を開始するように変更
+            canvas.DrawRect(
+                x + borderThickness + (innerWidth - filledWidth), // 右端からの位置を計算
+                y + borderThickness,
+                filledWidth,
+                innerHeight,
+                fillPaint
+            );
+        }
     }
 } 
