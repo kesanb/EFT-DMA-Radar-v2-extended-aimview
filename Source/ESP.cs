@@ -1,6 +1,7 @@
 using System.Numerics;
 using SkiaSharp;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace eft_dma_radar
 {
@@ -736,6 +737,131 @@ namespace eft_dma_radar
                 filledHeight,
                 fillPaint
             );
+        }
+
+        public void DrawQuestItem(SKCanvas canvas, QuestItem item, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
+        {
+            var currentY = screenPos.Y;
+
+            if (distance < objectSettings.PaintDistance)
+            {
+                using var paint = new SKPaint
+                {
+                    Color = Extensions.SKColorFromPaintColor("QuestItem"),
+                    Style = SKPaintStyle.Fill,
+                    IsAntialias = true
+                };
+                var objectSize = CalculateDistanceBasedSize(distance);
+                canvas.DrawCircle(screenPos.X, currentY, objectSize, paint);
+                currentY += (objectSize + AIMVIEW_OBJECT_SPACING) * uiScale;
+            }
+
+            if (distance < objectSettings.TextDistance)
+            {
+                using var textPaint = new SKPaint
+                {
+                    Color = Extensions.SKColorFromPaintColor("QuestItem"),
+                    TextSize = 14f * uiScale,
+                    TextAlign = SKTextAlign.Center,
+                    IsAntialias = true
+                };
+
+                if (objectSettings.Name)
+                {
+                    canvas.DrawText(item.Name, screenPos.X, currentY, textPaint);
+                    currentY += textPaint.TextSize * uiScale;
+                }
+
+                if (objectSettings.Distance)
+                {
+                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
+                }
+            }
+        }
+
+        public void DrawQuestZone(SKCanvas canvas, QuestZone zone, Vector2 screenPos, float distance, AimviewObjectSettings objectSettings)
+        {
+            var currentY = screenPos.Y;
+
+            if (distance < objectSettings.PaintDistance)
+            {
+                using var paint = new SKPaint
+                {
+                    Color = Extensions.SKColorFromPaintColor("QuestZone"),
+                    Style = SKPaintStyle.Fill,
+                    IsAntialias = true
+                };
+                var objectSize = CalculateDistanceBasedSize(distance);
+                canvas.DrawCircle(screenPos.X, currentY, objectSize, paint);
+                currentY += (objectSize + AIMVIEW_OBJECT_SPACING) * uiScale;
+            }
+
+            if (distance < objectSettings.TextDistance)
+            {
+                using var textPaint = new SKPaint
+                {
+                    Color = Extensions.SKColorFromPaintColor("QuestZone"),
+                    TextSize = 14f * uiScale,
+                    TextAlign = SKTextAlign.Center,
+                    IsAntialias = true
+                };
+
+                if (objectSettings.Name)
+                {
+                    canvas.DrawText(zone.ObjectiveType, screenPos.X, currentY, textPaint);
+                    currentY += textPaint.TextSize * uiScale;
+
+                    if (!string.IsNullOrEmpty(zone.Description))
+                    {
+                        canvas.DrawText(zone.Description, screenPos.X, currentY, textPaint);
+                        currentY += textPaint.TextSize * uiScale;
+                    }
+                }
+
+                if (objectSettings.Distance)
+                {
+                    canvas.DrawText($"{distance:F0}m", screenPos.X, currentY, textPaint);
+                }
+            }
+        }
+
+        public void DrawQuestItems(SKCanvas canvas, IEnumerable<QuestItem> questItems, Vector3 myPosition, AimviewObjectSettings settings, bool includeUnknown)
+        {
+            var items = includeUnknown ?
+                questItems.Where(x => x?.Position.X != 0 && x?.Name == "????") :
+                questItems.Where(x => x?.Position.X != 0 && x?.Name != "????" && !x.Complete);
+
+            foreach (var item in items)
+            {
+                var dist = Vector3.Distance(myPosition, item.Position);
+                if (dist > Math.Max(settings.PaintDistance, settings.TextDistance))
+                    continue;
+
+                var screenPos = WorldToScreen(item.Position, canvas);
+                if (screenPos == null || !IsWithinDrawingBounds(screenPos.Value, GetAimviewBounds(canvas)))
+                    continue;
+
+                DrawQuestItem(canvas, item, screenPos.Value, dist, settings);
+            }
+        }
+
+        public void DrawQuestZones(SKCanvas canvas, IEnumerable<QuestZone> questZones, Vector3 myPosition, AimviewObjectSettings settings)
+        {
+            var mapName = Memory.MapNameFormatted.ToLower();
+            var zones = questZones.Where(x => x.MapName.ToLower() == mapName && !x.Complete);
+
+            foreach (var zone in zones)
+            {
+                var dist = Vector3.Distance(myPosition, zone.Position);
+                if (dist > Math.Max(settings.PaintDistance, settings.TextDistance))
+                    continue;
+
+                var screenPos = WorldToScreen(zone.Position, canvas);
+                if (screenPos == null || !IsWithinDrawingBounds(screenPos.Value, GetAimviewBounds(canvas)))
+                    continue;
+
+                DrawQuestZone(canvas, zone, screenPos.Value, dist, settings);
+            }
         }
     }
 } 

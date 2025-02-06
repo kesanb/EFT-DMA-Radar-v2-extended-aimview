@@ -397,6 +397,20 @@ namespace eft_dma_radar
             {
                 esp.DrawTransits(canvas, this.Transits, myPosition, transitSettings);
             }
+
+            // RENDER QUEST ITEMS
+            var questItemSettings = aimviewSettings.ObjectSettings["QuestItem"];
+            if (questItemSettings?.Enabled == true && this.QuestManager?.QuestItems != null)
+            {
+                esp.DrawQuestItems(canvas, this.QuestManager.QuestItems, myPosition, questItemSettings, this.config.UnknownQuestItems);
+            }
+
+            // RENDER QUEST ZONES
+            var questZoneSettings = aimviewSettings.ObjectSettings["QuestZone"];
+            if (questZoneSettings?.Enabled == true && this.QuestManager?.QuestZones != null)
+            {
+                esp.DrawQuestZones(canvas, this.QuestManager.QuestZones, myPosition, questZoneSettings);
+            }
         }
 
         private void DrawCrosshair(SKCanvas canvas, SKRect drawingLocation)

@@ -83,6 +83,7 @@ namespace eft_dma_radar.Source.Tarkov
 
             var stats = CreatePlayerStats(playerData);
             _playerStatsCache[accountId] = stats;
+            Program.Log($"[FetchPlayerStats] => Retrieved player data - AccountID: {accountId}, Nickname: {stats.Nickname}");
             return stats;
         }
 
